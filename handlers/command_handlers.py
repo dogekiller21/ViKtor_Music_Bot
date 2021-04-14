@@ -7,6 +7,8 @@ from typing import Optional
 
 from discord.ext import commands
 
+from vk_parsing import get_audio
+
 
 def check_if_admin(ctx: commands.Context):
     _, _, guild_admins, _ = functions.get_guild_info(ctx.guild.id)
@@ -16,6 +18,10 @@ def check_if_admin(ctx: commands.Context):
 def check_if_owner(ctx: commands.Context):
     _, _, _, owner_id = functions.get_guild_info(ctx.guild.id)
     return ctx.message.author.id == owner_id
+
+
+def check_if_me(ctx: commands.Context):
+    return ctx.message.author.id == 242678412983009281
 
 
 # @client.command(pass_context=True)
@@ -94,6 +100,7 @@ async def roles_command(ctx: commands.Context, *, member: MemberRoles()):
 
 @client.command(name="join")
 @commands.guild_only()
+@commands.check(check_if_me)
 async def join_command(ctx: commands.Context):
     user_channel = ctx.author.voice.channel
     if ctx.voice_client:
@@ -105,6 +112,7 @@ async def join_command(ctx: commands.Context):
 
 @client.command(name="leave")
 @commands.guild_only()
+@commands.check(check_if_me)
 async def leave_command(ctx: commands.Context):
     voice = ctx.voice_client
     if voice.is_connected():
@@ -116,20 +124,24 @@ async def leave_command(ctx: commands.Context):
 
 @client.command(name="play")
 @commands.guild_only()
-async def play_command(ctx: commands.Context):
+@commands.check(check_if_me)
+async def play_command(ctx: commands.Context, link: str):
     voice = ctx.voice_client
-
+    tracks = await get_audio(link, ctx.guild.id)
+    print(link)
+    track_path = f"{ctx.guild.id}/1_{tracks[0]['name']}.mp3"
     if not voice or not voice.is_connected():
         await join_command(ctx)
         voice = ctx.voice_client
     if voice.is_paused():
         voice.resume()
         return
-    voice.play(discord.FFmpegPCMAudio(source="music.mp3"))
+    voice.play(discord.FFmpegPCMAudio(source=track_path))
 
 
 @client.command(name="pause")
 @commands.guild_only()
+@commands.check(check_if_me)
 async def pause_command(ctx: commands.Context):
     voice = ctx.voice_client
     if not voice.is_playing():
@@ -140,6 +152,7 @@ async def pause_command(ctx: commands.Context):
 
 @client.command(name="stop")
 @commands.guild_only()
+@commands.check(check_if_me)
 async def stop_command(ctx: commands.Context):
     voice = ctx.voice_client
     if not voice.is_playing():
