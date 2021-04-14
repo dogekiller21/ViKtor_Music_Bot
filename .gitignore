@@ -1,6 +1,5 @@
 .idea
 *.mp3
-config.json
 cfg.py
 
 # Byte-compiled / optimized / DLL files
