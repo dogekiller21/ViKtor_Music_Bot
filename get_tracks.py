@@ -49,12 +49,9 @@ def change_index(guild_id, index: int):
         json.dump(info, file, ensure_ascii=False, indent=2)
 
 
-if __name__ == "__main__":
-    write_tracks(248145752352620546, ["1", "3"])
-
-    print(get_tracks(248145752352620546))
-
-    change_index(248145752352620546, 2)
-
-    print(get_tracks(248145752352620546))
-
+def clear_info():
+    with open("tracks.json", "w", encoding="utf-8") as file:
+        info = {
+            "guilds": {}
+        }
+        json.dump(info, file, ensure_ascii=False, indent=2)

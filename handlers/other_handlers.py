@@ -2,11 +2,15 @@ import discord
 
 from bot import client
 import functions
+from get_tracks import clear_info
 
 
 @client.event
 async def on_ready():
     print('We have logged in as {0.user}'.format(client))
+
+    # clearing information about tracks
+    clear_info()
 
 
 @client.event

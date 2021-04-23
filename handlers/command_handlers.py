@@ -146,7 +146,8 @@ async def play_command(ctx: commands.Context, link: Optional[str] = None):
     tracks = await get_audio(link)
     write_tracks(ctx.guild.id, tracks)
 
-    voice.play(discord.FFmpegPCMAudio(source=tracks[0]))
+    voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]))
+    await ctx.send(f"Now playing: {tracks[0]['name']}")
 
 
 @client.command(name="pause")
@@ -186,7 +187,8 @@ async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
         if (new_index := now_playing + count) > len(tracks)-1:
             new_index = 0
         voice.stop()
-        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]))
+        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]))
+        await ctx.send(f"Now playing: {tracks[new_index]['name']}")
         change_index(ctx.guild.id, new_index)
 
 
@@ -203,5 +205,8 @@ async def prev_command(ctx: commands.Context, count: Optional[int] = 1):
         if (new_index := now_playing - count) < 0:
             new_index = len(tracks) - 1
         voice.stop()
-        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]))
+        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]))
+        await ctx.send(f"Now playing: {tracks[new_index]['name']}")
         change_index(ctx.guild.id, new_index)
+
+# TODO dodelat

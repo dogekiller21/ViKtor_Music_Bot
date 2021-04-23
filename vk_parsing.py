@@ -17,16 +17,19 @@ async def get_audio(url: str) -> list:
     owner_id, playlist_id = url_pars.split("_")
     playlist_id = playlist_id.split("%")[0]
     params["owner_id"] = int(owner_id)
-    key = playlist_id.split("%")
-
-    if key == playlist_id.split("%"):
+    if (len(spl := playlist_id.split("%"))) > 1:
+        key = spl[1]
         params["access_key"] = key
 
     params["playlist_id"] = int(playlist_id)
     tracks = []
     response = await api.get_context().api_request(method_name="audio.get", params=params)
     for item in response["response"]["items"]:
-        tracks.append(item["url"])
+        name = f"{item['title']} - {item['artist']}"
+        tracks.append({
+            "url": item["url"],
+            "name": name,
+            "duration": item["duration"]
+        }
+        )
     return tracks
-    # TODO dodelat
-
