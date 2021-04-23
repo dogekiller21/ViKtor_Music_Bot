@@ -100,7 +100,6 @@ async def roles_command(ctx: commands.Context, *, member: MemberRoles()):
 
 @client.command(name="join")
 @commands.guild_only()
-@commands.check(check_if_me)
 async def join_command(ctx: commands.Context):
     user_channel = ctx.author.voice.channel
     if ctx.voice_client:
@@ -124,19 +123,16 @@ async def leave_command(ctx: commands.Context):
 
 @client.command(name="play")
 @commands.guild_only()
-@commands.check(check_if_me)
 async def play_command(ctx: commands.Context, link: str):
     voice = ctx.voice_client
-    tracks = await get_audio(link, ctx.guild.id)
-    print(link)
-    track_path = f"{ctx.guild.id}/1_{tracks[0]['name']}.mp3"
+    tracks = await get_audio(link)
     if not voice or not voice.is_connected():
         await join_command(ctx)
         voice = ctx.voice_client
     if voice.is_paused():
         voice.resume()
         return
-    voice.play(discord.FFmpegPCMAudio(source=track_path))
+    voice.play(discord.FFmpegPCMAudio(source=tracks[0]))
 
 
 @client.command(name="pause")

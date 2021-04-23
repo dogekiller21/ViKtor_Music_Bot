@@ -34,7 +34,7 @@ async def on_guild_join(guild):
                     'Рекомендуется выдать боту роль с правами администратора',
         color=0x0a7cff
     )
-    message.set_footer(text=me.name, icon_url=me.avatar_url)
+    #message.set_footer(text=me.name, icon_url=me.avatar_url)
     await owner.send(embed=message)
 
 

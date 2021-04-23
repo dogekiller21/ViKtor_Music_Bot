@@ -11,12 +11,13 @@ client = AIOHTTPClient()
 api = API(clients=client, tokens=VK_ME_TOKEN, api_version="5.90")
 
 
-async def get_audio(url: str, guild_name="123") -> list:
-    guild_name = str(guild_name)
+async def get_audio(url: str) -> list:
+    # https://vk.com/audios578716413?z=audio_playlist-2000620821_1620821%2F18e2571a420a5b9d6b
     # https://vk.com/audios283345310?section=all&z=audio_playlist283345310_42
     url_pars = url.split("audio_playlist")[1]
     params = {}
     owner_id, playlist_id = url_pars.split("_")
+    playlist_id = playlist_id.split("%")[0]
     params["owner_id"] = int(owner_id)
     key = playlist_id.split("%")
 
@@ -26,28 +27,8 @@ async def get_audio(url: str, guild_name="123") -> list:
     params["playlist_id"] = int(playlist_id)
     tracks = []
     response = await api.get_context().api_request(method_name="audio.get", params=params)
-
-    if not os.path.exists(guild_name):
-        os.mkdir(guild_name)
-    for i, item in enumerate(response["response"]["items"]):
-
-        r: StreamReader = await client.http_client.raw_request(url=item["url"], method="get")
-
-        track_info = {
-            "name": f"{item['artist']} {item['title']}",
-            "duration": item["duration"],
-
-        }
-
-        if "/" in track_info["name"]:
-            track_info["name"] = track_info["name"].replace("/", "")
-        if "\\" in track_info["name"]:
-            track_info["name"] = track_info["name"].replace("\\", "")
-
-        with open(f"{guild_name}/{i+1}_{track_info['name']}.mp3", "wb") as file:
-            file.write(await r.read())
-
-        tracks.append(track_info)
+    for item in response["response"]["items"]:
+        tracks.append(item["url"])
     return tracks
     # TODO dodelat
 
