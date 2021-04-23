@@ -1,8 +1,6 @@
-from asyncio import StreamReader
-
 from cfg import VK_ME_TOKEN
 from vkwave.api import API
-import os
+
 from vkwave.client import AIOHTTPClient
 
 
