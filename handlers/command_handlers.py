@@ -175,16 +175,15 @@ async def stop_command(ctx: commands.Context):
 
 @client.command(name="skip")
 @commands.guild_only()
-async def skip_command(ctx: commands.Context):
+async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
         await ctx.send("Закинь в голосовой канал, ебана")
     else:
         tracks_info = get_tracks(ctx.guild.id)
-        print(tracks_info)
         tracks, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
 
-        if (new_index := now_playing + 1) > len(tracks)-1:
+        if (new_index := now_playing + count) > len(tracks)-1:
             new_index = 0
         voice.stop()
         voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]))
@@ -193,7 +192,7 @@ async def skip_command(ctx: commands.Context):
 
 @client.command(name="prev")
 @commands.guild_only()
-async def prev_command(ctx: commands.Context):
+async def prev_command(ctx: commands.Context, count: Optional[int] = 1):
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
         await ctx.send("Ну ты совсем еблан чтоль?")
@@ -201,7 +200,7 @@ async def prev_command(ctx: commands.Context):
         tracks_info = get_tracks(ctx.guild.id)
         tracks, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
 
-        if (new_index := now_playing - 1) < 0:
+        if (new_index := now_playing - count) < 0:
             new_index = len(tracks) - 1
         voice.stop()
         voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]))
