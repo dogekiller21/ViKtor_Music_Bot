@@ -9,8 +9,6 @@ from discord.ext import commands
 
 from vk_parsing import get_audio
 
-from get_tracks import *
-
 
 def check_if_admin(ctx: commands.Context):
     _, _, guild_admins, _ = functions.get_guild_info(ctx.guild.id)
@@ -132,17 +130,15 @@ def play_next(error, voice, ctx, tracks, now_playing):
     global skipped
     if not skipped[ctx.guild.id]:
         voice.stop()
-        print("ok")
         print(error)
-
         if (new_index := now_playing + 1) > len(tracks) - 1:
             new_index = 0
         voice.stop()
         voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]),
                    after=lambda x: play_next(x, voice, ctx, tracks, new_index))
-        change_index(ctx.guild.id, new_index)
+        functions.change_index(ctx.guild.id, new_index)
     else:
-        print("skipped")
+
         skipped[ctx.guild.id] = False
 
 
@@ -156,6 +152,10 @@ async def play_command(ctx: commands.Context, link: Optional[str] = None):
         await join_command(ctx)
         voice = ctx.voice_client
 
+    if voice.is_playing or voice.is_paused() and link is not None:
+        skipped[ctx.guild.id] = True
+        voice.stop()
+
     if voice.is_paused():
         voice.resume()
         return
@@ -165,7 +165,7 @@ async def play_command(ctx: commands.Context, link: Optional[str] = None):
 
         voice.stop()
     tracks = await get_audio(link)
-    write_tracks(ctx.guild.id, tracks)
+    functions.write_tracks(ctx.guild.id, tracks)
 
     voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]),
                after=lambda x: play_next(x, voice, ctx, tracks, 0))
@@ -193,8 +193,9 @@ async def stop_command(ctx: commands.Context):
     else:
         voice.stop()
 
-    delete_info(ctx.guild.id)
-    del skipped[ctx.guild.id]
+    functions.delete_info(ctx.guild.id)
+    # del skipped[ctx.guild.id]
+    # TODO KeyError then stopped
 
 
 async def play_new_track(voice, ctx, tracks, index):
@@ -202,7 +203,7 @@ async def play_new_track(voice, ctx, tracks, index):
     voice.play(discord.FFmpegPCMAudio(source=tracks[index]["url"]),
                after=lambda x: play_next(x, voice, ctx, tracks, index))
     await ctx.send(f"Now playing: {tracks[index]['name']}")
-    change_index(ctx.guild.id, index)
+    functions.change_index(ctx.guild.id, index)
 
 
 @client.command(name="skip")
@@ -214,7 +215,7 @@ async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
     if not voice or not voice.is_connected():
         await ctx.send("Закинь в голосовой канал, ебана")
     else:
-        tracks_info = get_tracks(ctx.guild.id)
+        tracks_info = functions.get_tracks(ctx.guild.id)
         tracks, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
 
         if (new_index := now_playing + count) > len(tracks)-1:
@@ -225,15 +226,15 @@ async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
 @client.command(name="prev")
 @commands.guild_only()
 async def prev_command(ctx: commands.Context, count: Optional[int] = 1):
+    global skipped
+    skipped[ctx.guild.id] = True
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
         await ctx.send("Ну ты совсем еблан чтоль?")
     else:
-        tracks_info = get_tracks(ctx.guild.id)
+        tracks_info = functions.get_tracks(ctx.guild.id)
         tracks, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
 
         if (new_index := now_playing - count) < 0:
             new_index = len(tracks) - 1
         await play_new_track(voice, ctx, tracks, new_index)
-
-# TODO сделать шобы перематывалось
