@@ -125,12 +125,33 @@ async def leave_command(ctx: commands.Context):
     else:
         await ctx.send("Not connected to any voice channel")
 
+skipped = {}
+
+
+def play_next(error, voice, ctx, tracks, now_playing):
+    global skipped
+    if not skipped[ctx.guild.id]:
+        voice.stop()
+        print("ok")
+        print(error)
+
+        if (new_index := now_playing + 1) > len(tracks) - 1:
+            new_index = 0
+        voice.stop()
+        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]),
+                   after=lambda x: play_next(x, voice, ctx, tracks, new_index))
+        change_index(ctx.guild.id, new_index)
+    else:
+        print("skipped")
+        skipped[ctx.guild.id] = False
+
 
 @client.command(name="play")
 @commands.guild_only()
 async def play_command(ctx: commands.Context, link: Optional[str] = None):
     voice = ctx.voice_client
 
+    skipped[ctx.guild.id] = False
     if not voice or not voice.is_connected():
         await join_command(ctx)
         voice = ctx.voice_client
@@ -146,7 +167,8 @@ async def play_command(ctx: commands.Context, link: Optional[str] = None):
     tracks = await get_audio(link)
     write_tracks(ctx.guild.id, tracks)
 
-    voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]))
+    voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]),
+               after=lambda x: play_next(x, voice, ctx, tracks, 0))
     await ctx.send(f"Now playing: {tracks[0]['name']}")
 
 
@@ -172,11 +194,22 @@ async def stop_command(ctx: commands.Context):
         voice.stop()
 
     delete_info(ctx.guild.id)
+    del skipped[ctx.guild.id]
+
+
+async def play_new_track(voice, ctx, tracks, index):
+    voice.stop()
+    voice.play(discord.FFmpegPCMAudio(source=tracks[index]["url"]),
+               after=lambda x: play_next(x, voice, ctx, tracks, index))
+    await ctx.send(f"Now playing: {tracks[index]['name']}")
+    change_index(ctx.guild.id, index)
 
 
 @client.command(name="skip")
 @commands.guild_only()
 async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
+    global skipped
+    skipped[ctx.guild.id] = True
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
         await ctx.send("Закинь в голосовой канал, ебана")
@@ -186,10 +219,7 @@ async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
 
         if (new_index := now_playing + count) > len(tracks)-1:
             new_index = 0
-        voice.stop()
-        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]))
-        await ctx.send(f"Now playing: {tracks[new_index]['name']}")
-        change_index(ctx.guild.id, new_index)
+        await play_new_track(voice, ctx, tracks, new_index)
 
 
 @client.command(name="prev")
@@ -204,9 +234,6 @@ async def prev_command(ctx: commands.Context, count: Optional[int] = 1):
 
         if (new_index := now_playing - count) < 0:
             new_index = len(tracks) - 1
-        voice.stop()
-        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]))
-        await ctx.send(f"Now playing: {tracks[new_index]['name']}")
-        change_index(ctx.guild.id, new_index)
+        await play_new_track(voice, ctx, tracks, new_index)
 
-# TODO dodelat
+# TODO сделать шобы перематывалось

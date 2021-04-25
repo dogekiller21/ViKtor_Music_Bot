@@ -10,8 +10,13 @@ api = API(clients=client, tokens=VK_ME_TOKEN, api_version="5.90")
 
 
 async def get_audio(url: str) -> list:
-    # https://vk.com/audios578716413?z=audio_playlist-2000620821_1620821%2F18e2571a420a5b9d6b
-    # https://vk.com/audios283345310?section=all&z=audio_playlist283345310_42
+    # TODO ссылки могут быть разные
+
+    # https://vk.com/music/album/-2000775086_8775086_3020c01f90d96ecf46
+    # https://vk.com/audios283345310?z=audio_playlist-2000775086_8775086%2F3020c01f90d96ecf46
+
+    # https://vk.com/music/playlist/283345310_50
+    # https://vk.com/audios283345310?z=audio_playlist283345310_50
     url_pars = url.split("audio_playlist")[1]
     params = {}
     owner_id, playlist_id = url_pars.split("_")
