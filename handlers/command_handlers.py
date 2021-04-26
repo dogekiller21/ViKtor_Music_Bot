@@ -101,9 +101,7 @@ async def roles_command(ctx: commands.Context, *, member: MemberRoles()):
 # VK MUSIC
 
 
-@client.command(name="join")
-@commands.guild_only()
-async def join_command(ctx: commands.Context):
+async def _join(ctx: commands.Context):
     user_channel = ctx.author.voice.channel
     if ctx.voice_client:
         await ctx.voice_client.move_to(user_channel)
@@ -112,7 +110,7 @@ async def join_command(ctx: commands.Context):
         await user_channel.connect()
 
 
-def play_next(error, voice, ctx):
+def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
     if error is not None:
         print(error)
     tracks_info = functions.get_tracks(ctx.guild.id)
@@ -126,16 +124,26 @@ def play_next(error, voice, ctx):
         voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]),
                    after=lambda err: play_next(err, voice, ctx))
         functions.change_index(ctx.guild.id, new_index)
+
+        # TODO sending message about new track
         # loop = asyncio.get_running_loop()
         # loop.run_until_complete(ctx.send(f"Now playing: {tracks[new_index]['name']}"))
 
 
 @client.command(name="play")
 @commands.guild_only()
-async def play_command(ctx: commands.Context, link: Optional[str] = None):
+async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
+    if not ctx.author.voice:
+        await ctx.send("You have to be connected to voice channel")
+        return
+
+    if "vk.com/" not in link:
+        await ctx.send("I can play only VK playlists!")
+        return
+
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
-        await join_command(ctx)
+        await _join(ctx)
         voice = ctx.voice_client
 
     elif voice.is_playing or voice.is_paused() and link is not None:
@@ -189,7 +197,7 @@ async def stop_command(ctx: commands.Context):
 
 @client.command(name="skip")
 @commands.guild_only()
-async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
+async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
         await ctx.send("Закинь в голосовой канал, ебана")
@@ -199,6 +207,7 @@ async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
         if (new_index := index + count) > len(tracks):
             new_index = 0
 
+        # Change index and skip track by stopping playing current one
         functions.change_index(ctx.guild.id, new_index-1)
 
         voice.stop()
@@ -206,7 +215,7 @@ async def skip_command(ctx: commands.Context, count: Optional[int] = 1):
 
 @client.command(name="prev")
 @commands.guild_only()
-async def prev_command(ctx: commands.Context, count: Optional[int] = 1):
+async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
 
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
