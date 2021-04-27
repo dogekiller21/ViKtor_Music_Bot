@@ -1,3 +1,5 @@
+import discord
+
 from bot import client
 
 from discord.ext import commands
@@ -15,6 +17,9 @@ async def on_command_error(_, error):
         if isinstance(error, commands.RoleNotFound):
             return
         print(f'Command error: "{error}"')
+        print(error.__traceback__)
+    else:
+        print(error.__traceback__)
 
 
 @admin_command.error

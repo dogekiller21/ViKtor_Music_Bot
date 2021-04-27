@@ -13,8 +13,6 @@ from vk_parsing import get_audio
 
 import concurrent.futures
 
-global_loop = asyncio.get_event_loop()
-
 
 def check_if_admin(ctx: commands.Context):
     _, _, guild_admins, _ = functions.get_guild_info(ctx.guild.id)
@@ -125,7 +123,6 @@ async def _join(ctx: commands.Context):
     if ctx.voice_client:
         await ctx.voice_client.move_to(user_channel)
     else:
-        await ctx.send("Joining...")
         await user_channel.connect()
 
 pool = concurrent.futures.ThreadPoolExecutor()
@@ -145,10 +142,9 @@ def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
         voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]),
                    after=lambda err: play_next(err, voice, ctx))
         functions.change_index(ctx.guild.id, new_index)
-        embed = discord.Embed(
+        embed = functions.create_music_embed(
             title="Now playing",
-            description=f"{new_index+1}. {tracks[new_index]['name']}",
-            colour=0xffa033
+            description=f"{new_index+1}. {tracks[new_index]['name']}"
         )
         loop = client.loop
         asyncio.run_coroutine_threadsafe(ctx.send(embed=embed), loop)
@@ -165,7 +161,7 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
         await ctx.send(embed=embed)
         return
 
-    if "vk.com/" not in link:
+    if link and "vk.com/" not in link:
         embed = discord.Embed(
             description="I can play only VK music!",
             colour=0xe74c3c
@@ -178,9 +174,13 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
         await _join(ctx)
         voice = ctx.voice_client
 
-    elif voice.is_playing or voice.is_paused() and link is not None:
-        functions.delete_info(ctx.guild.id)
-        voice.stop()
+    elif (voice.is_playing or voice.is_paused()) and link is not None:
+        try:
+            functions.delete_info(ctx.guild.id)
+        except KeyError:
+            pass
+        finally:
+            voice.stop()
 
     elif voice.is_paused():
         voice.resume()
@@ -201,11 +201,11 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
     else:
         description = f"{tracks[0]['name']}"
 
-    embed = discord.Embed(
+    embed = functions.create_music_embed(
         title="Now playing",
-        description=description,
-        colour=0xffa033
+        description=description
     )
+
     await ctx.send(embed=embed)
 
 
@@ -214,10 +214,8 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
 async def pause_command(ctx: commands.Context):
     voice = ctx.voice_client
     if not voice.is_playing():
-        embed = discord.Embed(
-            description="Nothing is playing",
-            colour=0xe74c3c
-        )
+        embed = functions.create_error_embed("Nothing is playing")
+
         await ctx.send(embed=embed)
         return
     voice.pause()
@@ -231,10 +229,8 @@ async def stop_command(ctx: commands.Context):
         functions.delete_info(ctx.guild.id)
         voice.stop()
     else:
-        embed = discord.Embed(
-            description="Not connected to any voice channel",
-            colour=0xe74c3c
-        )
+        embed = functions.create_error_embed("Not connected to any voice channel")
+
         await ctx.send(embed=embed)
 
 
@@ -243,13 +239,16 @@ async def stop_command(ctx: commands.Context):
 async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
-        embed = discord.Embed(
-            description="Закинь в голосовой канал, ебана",
-            colour=0xe74c3c
-        )
+        embed = functions.create_error_embed("Закинь в голосовой канал, ебана")
+
         await ctx.send(embed=embed)
     else:
         tracks_info = functions.get_tracks(ctx.guild.id)
+        if tracks_info is None:
+            embed = functions.create_error_embed("Nothing is playing")
+            await ctx.send(embed=embed)
+            return
+
         tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
         if (new_index := index + count) > len(tracks):
             new_index = 0
@@ -266,13 +265,16 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
 
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
-        embed = discord.Embed(
-            description="Ну ты совсем еблан чтоль?",
-            colour=0xe74c3c
-        )
+        embed = functions.create_error_embed("Ну ты совсем еблан чтоль?")
+
         await ctx.send(embed=embed)
     else:
         tracks_info = functions.get_tracks(ctx.guild.id)
+        if tracks_info is None:
+            embed = functions.create_error_embed("Nothing is playing")
+            await ctx.send(embed=embed)
+            return
+
         tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
         if (new_index := index - count) < 0:
             new_index = len(tracks) - 1
@@ -287,7 +289,6 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
 async def queue_command(ctx: commands.Context, *, page: Optional[int] = 1):
     tracks_info = functions.get_tracks(ctx.guild.id)
     track_list, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
-    embed = discord.Embed(colour=0xffa033)
     if page == 1:
         page_index = 0
     else:
@@ -303,15 +304,18 @@ async def queue_command(ctx: commands.Context, *, page: Optional[int] = 1):
         if track_index == now_playing:
             tracks[-1] += "\n↑ now playing ↑"
 
+    pages = None
     if (length := len(track_list)) > 10:
         if length % 10 != 0:
             pages = length // 10 + 1
         else:
             pages = length // 10
-        embed.set_footer(text=f"Page: {page} / {pages}")
+        pages = f"Page: {page} / {pages}"
 
-    embed.description = "\n\n".join(tracks)
-
-    embed.set_thumbnail(url="https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png")
+    embed = functions.create_queue_embed(
+        description="\n\n".join(tracks),
+        image="https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png",
+        pages=pages
+    )
 
     await ctx.send(embed=embed)
