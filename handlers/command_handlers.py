@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 
 from bot import client
@@ -8,6 +10,10 @@ from typing import Optional
 from discord.ext import commands
 
 from vk_parsing import get_audio
+
+import concurrent.futures
+
+global_loop = asyncio.get_event_loop()
 
 
 def check_if_admin(ctx: commands.Context):
@@ -100,6 +106,19 @@ async def roles_command(ctx: commands.Context, *, member: MemberRoles()):
 
 # VK MUSIC
 
+@client.command(name="leave")
+@commands.guild_only()
+async def leave_command(ctx: commands.Context):
+    voice = ctx.voice_client
+    if voice and voice.is_connected():
+        await voice.disconnect()
+    else:
+        embed = discord.Embed(
+            description="Not connected to any voice channel",
+            colour=0xe74c3c
+        )
+        await ctx.send(embed=embed)
+
 
 async def _join(ctx: commands.Context):
     user_channel = ctx.author.voice.channel
@@ -108,6 +127,8 @@ async def _join(ctx: commands.Context):
     else:
         await ctx.send("Joining...")
         await user_channel.connect()
+
+pool = concurrent.futures.ThreadPoolExecutor()
 
 
 def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
@@ -124,21 +145,32 @@ def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
         voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]),
                    after=lambda err: play_next(err, voice, ctx))
         functions.change_index(ctx.guild.id, new_index)
-
-        # TODO sending message about new track
-        # loop = asyncio.get_running_loop()
-        # loop.run_until_complete(ctx.send(f"Now playing: {tracks[new_index]['name']}"))
+        embed = discord.Embed(
+            title="Now playing",
+            description=f"{new_index+1}. {tracks[new_index]['name']}",
+            colour=0xffa033
+        )
+        loop = client.loop
+        asyncio.run_coroutine_threadsafe(ctx.send(embed=embed), loop)
 
 
 @client.command(name="play")
 @commands.guild_only()
 async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
     if not ctx.author.voice:
-        await ctx.send("You have to be connected to voice channel")
+        embed = discord.Embed(
+            description="You have to be connected to voice channel",
+            colour=0xe74c3c
+        )
+        await ctx.send(embed=embed)
         return
 
     if "vk.com/" not in link:
-        await ctx.send("I can play only VK playlists!")
+        embed = discord.Embed(
+            description="I can play only VK music!",
+            colour=0xe74c3c
+        )
+        await ctx.send(embed=embed)
         return
 
     voice = ctx.voice_client
@@ -163,7 +195,18 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
 
     voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]),
                after=lambda x: play_next(x, voice, ctx))
-    await ctx.send(f"Now playing: {tracks[0]['name']}")
+
+    if len(tracks) > 1:
+        description = f"1. {tracks[0]['name']}"
+    else:
+        description = f"{tracks[0]['name']}"
+
+    embed = discord.Embed(
+        title="Now playing",
+        description=description,
+        colour=0xffa033
+    )
+    await ctx.send(embed=embed)
 
 
 @client.command(name="pause")
@@ -171,7 +214,11 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
 async def pause_command(ctx: commands.Context):
     voice = ctx.voice_client
     if not voice.is_playing():
-        await ctx.send("Nothing is playing")
+        embed = discord.Embed(
+            description="Nothing is playing",
+            colour=0xe74c3c
+        )
+        await ctx.send(embed=embed)
         return
     voice.pause()
 
@@ -184,15 +231,11 @@ async def stop_command(ctx: commands.Context):
         functions.delete_info(ctx.guild.id)
         voice.stop()
     else:
-        await ctx.send("Not connected to any voice channel")
-
-
-# async def play_new_track(voice, ctx, tracks, index):
-#     voice.stop()
-#     voice.play(discord.FFmpegPCMAudio(source=tracks[index]["url"]),
-#                after=lambda x: play_next(x, voice, ctx))
-#     await ctx.send(f"Now playing: {tracks[index]['name']}")
-#     functions.change_index(ctx.guild.id, index)
+        embed = discord.Embed(
+            description="Not connected to any voice channel",
+            colour=0xe74c3c
+        )
+        await ctx.send(embed=embed)
 
 
 @client.command(name="skip")
@@ -200,7 +243,11 @@ async def stop_command(ctx: commands.Context):
 async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
-        await ctx.send("Закинь в голосовой канал, ебана")
+        embed = discord.Embed(
+            description="Закинь в голосовой канал, ебана",
+            colour=0xe74c3c
+        )
+        await ctx.send(embed=embed)
     else:
         tracks_info = functions.get_tracks(ctx.guild.id)
         tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
@@ -219,7 +266,11 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
 
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
-        await ctx.send("Ну ты совсем еблан чтоль?")
+        embed = discord.Embed(
+            description="Ну ты совсем еблан чтоль?",
+            colour=0xe74c3c
+        )
+        await ctx.send(embed=embed)
     else:
         tracks_info = functions.get_tracks(ctx.guild.id)
         tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
@@ -229,3 +280,38 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
         functions.change_index(ctx.guild.id, new_index-1)
 
         voice.stop()
+
+
+@client.command(name="queue")
+@commands.guild_only()
+async def queue_command(ctx: commands.Context, *, page: Optional[int] = 1):
+    tracks_info = functions.get_tracks(ctx.guild.id)
+    track_list, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
+    embed = discord.Embed(colour=0xffa033)
+    if page == 1:
+        page_index = 0
+    else:
+        page_index = (page-1) * 10
+    tracks = []
+    for i, track in enumerate(track_list[page_index::]):
+        if i == 10:
+            break
+        track_index = i+(page-1)*10
+        tracks.append(
+            f"**{track_index+1}. {track['name']}**"
+        )
+        if track_index == now_playing:
+            tracks[-1] += "\n↑ now playing ↑"
+
+    if (length := len(track_list)) > 10:
+        if length % 10 != 0:
+            pages = length // 10 + 1
+        else:
+            pages = length // 10
+        embed.set_footer(text=f"Page: {page} / {pages}")
+
+    embed.description = "\n\n".join(tracks)
+
+    embed.set_thumbnail(url="https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png")
+
+    await ctx.send(embed=embed)
