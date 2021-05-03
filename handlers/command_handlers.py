@@ -11,8 +11,6 @@ from discord.ext import commands
 
 from vk_parsing import get_audio
 
-import concurrent.futures
-
 
 def check_if_admin(ctx: commands.Context):
     _, _, guild_admins, _ = functions.get_guild_info(ctx.guild.id)
@@ -98,24 +96,15 @@ class MemberRoles(commands.MemberConverter):
 @client.command(name="roles", pass_context=True)
 @commands.guild_only()
 async def roles_command(ctx: commands.Context, *, member: MemberRoles()):
-    msg = "\n".join([r.name for r in reversed(member)])
-    await ctx.send(f"Твои роли:\n{msg}")
+    description = "\n".join([r.name for r in reversed(member)])
+    embed = discord.Embed(
+        title="Роли",
+        description=description
+    )
+    await ctx.send(embed=embed)
 
 
 # VK MUSIC
-
-@client.command(name="leave")
-@commands.guild_only()
-async def leave_command(ctx: commands.Context):
-    voice = ctx.voice_client
-    if voice and voice.is_connected():
-        await voice.disconnect()
-    else:
-        embed = discord.Embed(
-            description="Not connected to any voice channel",
-            colour=0xe74c3c
-        )
-        await ctx.send(embed=embed)
 
 
 async def _join(ctx: commands.Context):
@@ -124,8 +113,6 @@ async def _join(ctx: commands.Context):
         await ctx.voice_client.move_to(user_channel)
     else:
         await user_channel.connect()
-
-pool = concurrent.futures.ThreadPoolExecutor()
 
 
 def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
@@ -144,49 +131,79 @@ def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
         functions.change_index(ctx.guild.id, new_index)
         embed = functions.create_music_embed(
             title="Now playing",
-            description=f"{new_index+1}. {tracks[new_index]['name']}"
+            description=f"{new_index + 1}. {tracks[new_index]['name']}"
         )
         loop = client.loop
         asyncio.run_coroutine_threadsafe(ctx.send(embed=embed), loop)
 
 
+@client.command(name="leave")
+@commands.guild_only()
+async def leave_command(ctx: commands.Context):
+    await ctx.message.add_reaction("🚪")
+
+    voice = ctx.voice_client
+    if voice and voice.is_connected():
+        functions.delete_info(ctx.guild.id)
+        await voice.disconnect()
+        await ctx.message.add_reaction("✔")
+    else:
+        embed = functions.create_error_embed("Not connected to any voice channel")
+
+        await ctx.send(embed=embed)
+
+        await ctx.message.add_reaction("❌")
+
+
+async def nothing_is_playing_error(ctx: commands.Context):
+    embed = functions.create_error_embed("Nothing is playing")
+    await ctx.send(embed=embed)
+
+    await ctx.message.add_reaction("❌")
+
+
 @client.command(name="play")
 @commands.guild_only()
 async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
+    await ctx.message.add_reaction("▶")
+
     if not ctx.author.voice:
-        embed = discord.Embed(
-            description="You have to be connected to voice channel",
-            colour=0xe74c3c
-        )
+        embed = functions.create_error_embed("You have to be connected to voice channel")
+
         await ctx.send(embed=embed)
+
+        await ctx.message.add_reaction("❌")
         return
 
-    if link and "vk.com/" not in link:
-        embed = discord.Embed(
-            description="I can play only VK music!",
-            colour=0xe74c3c
-        )
+    if link and ("vk.com/" not in link):
+        embed = functions.create_error_embed("I can play only VK music!")
+
         await ctx.send(embed=embed)
+
+        await ctx.message.add_reaction("❌")
         return
 
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
         await _join(ctx)
         voice = ctx.voice_client
+    elif link is None and not (voice.is_playing() or voice.is_paused()):
+        await nothing_is_playing_error(ctx)
+        return
 
     elif (voice.is_playing or voice.is_paused()) and link is not None:
-        try:
-            functions.delete_info(ctx.guild.id)
-        except KeyError:
-            pass
-        finally:
-            voice.stop()
+        functions.delete_info(ctx.guild.id)
+        voice.stop()
 
     elif voice.is_paused():
+
         voice.resume()
+
+        await ctx.message.add_reaction("✔")
         return
     elif voice.is_playing():
         if not link:
+            await ctx.message.add_reaction("✔")
             return
 
         voice.stop()
@@ -208,45 +225,48 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
 
     await ctx.send(embed=embed)
 
+    await ctx.message.add_reaction("✔")
+
 
 @client.command(name="pause")
 @commands.guild_only()
 async def pause_command(ctx: commands.Context):
+    await ctx.message.add_reaction("⏸")
     voice = ctx.voice_client
     if not voice.is_playing():
-        embed = functions.create_error_embed("Nothing is playing")
-
-        await ctx.send(embed=embed)
+        await nothing_is_playing_error(ctx)
         return
     voice.pause()
+
+    await ctx.message.add_reaction("✔")
 
 
 @client.command(name="stop")
 @commands.guild_only()
 async def stop_command(ctx: commands.Context):
+    await ctx.message.add_reaction("⏹")
     voice = ctx.voice_client
-    if voice.is_connected():
+    if voice is None or not (voice.is_playing() or voice.is_paused()):
+        await nothing_is_playing_error(ctx)
+    elif voice.is_connected():
         functions.delete_info(ctx.guild.id)
         voice.stop()
-    else:
-        embed = functions.create_error_embed("Not connected to any voice channel")
 
-        await ctx.send(embed=embed)
+        await ctx.message.add_reaction("✔")
 
 
 @client.command(name="skip")
 @commands.guild_only()
 async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
+    await ctx.message.add_reaction("⏩")
     voice = ctx.voice_client
-    if not voice or not voice.is_connected():
-        embed = functions.create_error_embed("Закинь в голосовой канал, ебана")
+    if voice is None:
+        await nothing_is_playing_error(ctx)
 
-        await ctx.send(embed=embed)
     else:
         tracks_info = functions.get_tracks(ctx.guild.id)
         if tracks_info is None:
-            embed = functions.create_error_embed("Nothing is playing")
-            await ctx.send(embed=embed)
+            await nothing_is_playing_error(ctx)
             return
 
         tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
@@ -254,52 +274,68 @@ async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
             new_index = 0
 
         # Change index and skip track by stopping playing current one
-        functions.change_index(ctx.guild.id, new_index-1)
+        functions.change_index(ctx.guild.id, new_index - 1)
 
         voice.stop()
+
+        await ctx.message.add_reaction("✔")
 
 
 @client.command(name="prev")
 @commands.guild_only()
 async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
-
+    await ctx.message.add_reaction("⏪")
     voice = ctx.voice_client
-    if not voice or not voice.is_connected():
-        embed = functions.create_error_embed("Ну ты совсем еблан чтоль?")
+    if voice is None:
+        await nothing_is_playing_error(ctx)
 
-        await ctx.send(embed=embed)
     else:
         tracks_info = functions.get_tracks(ctx.guild.id)
         if tracks_info is None:
-            embed = functions.create_error_embed("Nothing is playing")
-            await ctx.send(embed=embed)
+            await nothing_is_playing_error(ctx)
             return
 
         tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
         if (new_index := index - count) < 0:
             new_index = len(tracks) - 1
 
-        functions.change_index(ctx.guild.id, new_index-1)
+        functions.change_index(ctx.guild.id, new_index - 1)
 
         voice.stop()
+
+        await ctx.message.add_reaction("✔")
 
 
 @client.command(name="queue")
 @commands.guild_only()
-async def queue_command(ctx: commands.Context, *, page: Optional[int] = 1):
+async def queue_command(ctx: commands.Context, *, page: Optional[int] = None):
+    await ctx.message.add_reaction("📄")
+
     tracks_info = functions.get_tracks(ctx.guild.id)
+    if tracks_info is None:
+        embed = functions.create_error_embed("Queue is empty")
+        await ctx.send(embed=embed)
+
+        await ctx.message.add_reaction("❌")
+        return
+
     track_list, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
+    if page is None:
+        if ((now_playing + 1) / 10) != 0:
+            page = (now_playing + 1) // 10 + 1
+        else:
+            page = (now_playing + 1) // 10
     if page == 1:
         page_index = 0
     else:
-        page_index = (page-1) * 10
+        page_index = (page - 1) * 10
     tracks = []
     for i, track in enumerate(track_list[page_index::]):
         if i == 10:
             break
-        track_index = i+(page-1)*10
+        track_index = i + (page - 1) * 10
         tracks.append(
-            f"**{track_index+1}. {track['name']}**"
+            f"**{track_index + 1}. {track['name']}**"
         )
         if track_index == now_playing:
             tracks[-1] += "\n↑ now playing ↑"
@@ -319,3 +355,5 @@ async def queue_command(ctx: commands.Context, *, page: Optional[int] = 1):
     )
 
     await ctx.send(embed=embed)
+
+    await ctx.message.add_reaction("✔")

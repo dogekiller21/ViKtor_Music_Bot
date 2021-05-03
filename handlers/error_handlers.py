@@ -1,10 +1,10 @@
-import discord
-
 from bot import client
 
 from discord.ext import commands
 
 from handlers.command_handlers import (admin_command, user_command, welcome_role_command)
+
+from discord.errors import ClientException
 
 
 @client.event
@@ -17,9 +17,11 @@ async def on_command_error(_, error):
         if isinstance(error, commands.RoleNotFound):
             return
         print(f'Command error: "{error}"')
-        print(error.__traceback__)
+
+    if isinstance(error, ClientException):
+        print(f'Client exception: "{error}"')
     else:
-        print(error.__traceback__)
+        print(error)
 
 
 @admin_command.error

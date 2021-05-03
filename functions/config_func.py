@@ -2,12 +2,14 @@ import json
 from typing import Optional
 
 
-def json_write(guild_id: int,
-               owner_id: Optional[int] = None,
-               welcome_channel: Optional[int] = None,
-               welcome_role: Optional[int] = None,
-               new_admin_id: Optional[int] = None,
-               admin_demotion_id: Optional[int] = None):
+def json_write(
+        guild_id: int,
+        owner_id: Optional[int] = None,
+        welcome_channel: Optional[int] = None,
+        welcome_role: Optional[int] = None,
+        new_admin_id: Optional[int] = None,
+        admin_demotion_id: Optional[int] = None
+):
     with open('config.json', 'r', encoding='utf-8') as file:
         all_data = json.load(file)
         guilds_info = all_data['data']['guilds']
@@ -18,7 +20,7 @@ def json_write(guild_id: int,
                 'welcome_channel_id': welcome_channel,
                 'welcome_role_id': welcome_role,
                 'admins': [owner_id]
-               }
+            }
         if welcome_role:
             guilds_info[str(guild_id)]['welcome_role_id'] = welcome_role
 
