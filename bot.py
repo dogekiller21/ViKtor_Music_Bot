@@ -2,6 +2,9 @@ import discord
 from cfg import DC_TOKEN
 from discord.ext import commands
 
+# import logging
+# logging.basicConfig(level=logging.INFO)
+
 prefix = '-'
 intents = discord.Intents.all()
 intents.members = True

@@ -17,24 +17,31 @@ async def on_guild_join(guild):
     guild_id = guild.id
     owner_id = guild.owner_id
     first_text_channel = guild.text_channels[0].id
-    functions.json_write(guild_id=guild_id, owner_id=owner_id, welcome_channel=first_text_channel)
+    functions.save_new_guild(guild_id=guild_id, owner_id=owner_id, welcome_channel=first_text_channel)
     owner = client.get_user(owner_id)
     me = client.get_user(242678412983009281)
     message = discord.Embed(
         title=f'Я был приглашен на твой сервер {guild.name}',
-        description='Мои возможности:\n'
-                    '-welcome_channel idКанала (без id будет выбран текущий канал) '
-                    '- настроить канал для приветствий\n'
-                    '-welcome_role @role_mention (без упоминания информация о текущих настройках) '
-                    '- настроить роль для новых пользователей\n\n'
-                    'Предыдущие команды может писать либо создатель сервера, '
-                    'либо администраторы, назначенные создателем\n'
-                    '-admin @user_mention - назначить администратора\n'
-                    '-user @user_mention - забрать права администратора\n\n'
-                    '-roles - список ролей пользователя\n'
+        description='Я умею:\n'
+                    '1) Приветствовать новых пользователей и выдавать им роли.\n'
+                    'Чтобы настроить канал для приветствий: -welcome_channel <id> '
+                    '(без id будет выбран канал, в котором было отправлено сообщение)\n'
+                    'Чтобы настроить роль для новых пользователей: -welcome_role <role> '
+                    '(без упоминания информация о текущих настройках)\n\n'
+                    'Управлять этим могут только администраторы и создатель\n'
+                    '-admin <user> - назначить администратора\n'
+                    '-user <user> - забрать права администратора\n'
                     '\nЧтобы бот имел возможность выдавать роли, ему нужно выдать '
                     'роль с правом выдачи других ролей и переместить ее выше остальных\n'
-                    'Рекомендуется выдать боту роль с правами администратора',
+                    'Рекомендуется выдать боту роль с правами администратора\n\n'
+                    '2) Проигрывать музыку из ВК\n'
+                    'Для проигрывания плейлиста или альбома: -play <link>\n'
+                    'Пропустить трек: -skip <кол-во> (по стандарту 1)\n'
+                    'Предыдущий трек: -prev <кол-во> (по стандарту 1)\n'
+                    'Приостановить: -pause\n'
+                    'Запустить вновь: -play\n'
+                    'Прекратить прослушивание: -stop\n'
+                    'Заставить бота выйти из канала: -leave',
         color=0x0a7cff
     )
     message.set_footer(text=me.name, icon_url=me.avatar_url)
@@ -43,14 +50,18 @@ async def on_guild_join(guild):
 
 @client.event
 async def on_member_join(member):
-    channel, role, _, _ = functions.get_guild_info(guild_id=member.guild.id)
+    channel = functions.get_guild_smf(member.guild.id, "welcome_channel_id")
+    role = functions.get_guild_smf(member.guild.id, "welcome_role_id")
     msg_channel = client.get_channel(channel)
     if role:
         user_role = discord.utils.get(member.guild.roles, id=role)
         try:
             await member.add_roles(user_role)
         except Exception as err:
-            await msg_channel.send(f'Невозможно выдать роль {user_role.mention} участнику {member.mention}')
+            embed = functions.create_error_embed(
+                message=f'Невозможно выдать роль {user_role.mention} участнику {member.mention}'
+            )
+            await msg_channel.send(embed=embed)
             print(err)
     message = discord.Embed(
         title='Новый пользователь!',
