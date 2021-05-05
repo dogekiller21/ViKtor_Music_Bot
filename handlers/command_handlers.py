@@ -49,6 +49,11 @@ async def admin_command(ctx: commands.Context, member: discord.Member):
 @commands.guild_only()
 @commands.check(check_if_owner)
 async def user_command(ctx: commands.Context, member: discord.Member):
+    if member.id == ctx.guild.owner.id:
+        embed = functions.create_error_embed(
+            message="Вы не можете забрать права администратора у владельца сервера"
+        )
+        return await ctx.send(embed=embed)
     guild_admin = functions.get_guild_smf(ctx.guild.id, "admins")
 
     if member.id in guild_admin:
@@ -75,8 +80,8 @@ async def welcome_channel_command(ctx: commands.Context, channel_id=None):
         embed = functions.create_error_embed(
             message="ID канала может состоять только из цифр"
         )
-        await ctx.send(embed=embed)
-        return
+        return await ctx.send(embed=embed)
+
     else:
         channel_id = int(channel_id)
         msg_end = f'канале с id {channel_id}'
@@ -195,24 +200,21 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
 
         await ctx.send(embed=embed)
 
-        await ctx.message.add_reaction("❌")
-        return
+        return await ctx.message.add_reaction("❌")
 
     if link and ("vk.com/" not in link):
         embed = functions.create_error_embed("I can play only VK music!")
 
         await ctx.send(embed=embed)
 
-        await ctx.message.add_reaction("❌")
-        return
+        return await ctx.message.add_reaction("❌")
 
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
         await _join(ctx)
         voice = ctx.voice_client
     elif link is None and not (voice.is_playing() or voice.is_paused()):
-        await nothing_is_playing_error(ctx)
-        return
+        return await nothing_is_playing_error(ctx)
 
     elif (voice.is_playing or voice.is_paused()) and link is not None:
         functions.delete_info(ctx.guild.id)
@@ -222,12 +224,11 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
 
         voice.resume()
 
-        await ctx.message.add_reaction("✔")
-        return
+        return await ctx.message.add_reaction("✔")
+
     elif voice.is_playing():
         if not link:
-            await ctx.message.add_reaction("✔")
-            return
+            return await ctx.message.add_reaction("✔")
 
         voice.stop()
     tracks = await get_audio(link)
@@ -257,8 +258,8 @@ async def pause_command(ctx: commands.Context):
     await ctx.message.add_reaction("⏸")
     voice = ctx.voice_client
     if not voice.is_playing():
-        await nothing_is_playing_error(ctx)
-        return
+        return await nothing_is_playing_error(ctx)
+
     voice.pause()
 
     await ctx.message.add_reaction("✔")
@@ -289,8 +290,7 @@ async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
     else:
         tracks_info = functions.get_tracks(ctx.guild.id)
         if tracks_info is None:
-            await nothing_is_playing_error(ctx)
-            return
+            return await nothing_is_playing_error(ctx)
 
         tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
         if (new_index := index + count) > len(tracks):
@@ -315,8 +315,7 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
     else:
         tracks_info = functions.get_tracks(ctx.guild.id)
         if tracks_info is None:
-            await nothing_is_playing_error(ctx)
-            return
+            return await nothing_is_playing_error(ctx)
 
         tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
         if (new_index := index - count) < 0:
@@ -339,8 +338,7 @@ async def queue_command(ctx: commands.Context, *, page: Optional[int] = None):
         embed = functions.create_error_embed("Queue is empty")
         await ctx.send(embed=embed)
 
-        await ctx.message.add_reaction("❌")
-        return
+        return await ctx.message.add_reaction("❌")
 
     track_list, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
     if page is None:
