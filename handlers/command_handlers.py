@@ -9,7 +9,7 @@ from typing import Optional
 
 from discord.ext import commands
 
-from vk_parsing import get_audio
+from vk_parsing import get_audio, get_single_audio, NoTracksFound
 
 
 def check_if_admin(ctx: commands.Context):
@@ -192,7 +192,7 @@ async def nothing_is_playing_error(ctx: commands.Context):
 
 @client.command(name="play")
 @commands.guild_only()
-async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
+async def play_command(ctx: commands.Context, *link: Optional[str]):
     await ctx.message.add_reaction("▶")
 
     if not ctx.author.voice:
@@ -202,21 +202,17 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
 
         return await ctx.message.add_reaction("❌")
 
-    if link and ("vk.com/" not in link):
-        embed = functions.create_error_embed("I can play only VK music!")
-
-        await ctx.send(embed=embed)
-
-        return await ctx.message.add_reaction("❌")
+    if (len(link) > 0) and "vk.com/" not in link[0]:
+        return await add_to_queue_command(ctx, *link)
 
     voice = ctx.voice_client
     if not voice or not voice.is_connected():
         await _join(ctx)
         voice = ctx.voice_client
-    elif link is None and not (voice.is_playing() or voice.is_paused()):
+    elif (len(link) == 0) and not (voice.is_playing() or voice.is_paused()):
         return await nothing_is_playing_error(ctx)
 
-    elif (voice.is_playing or voice.is_paused()) and link is not None:
+    elif (voice.is_playing or voice.is_paused()) and (len(link) != 0):
         functions.delete_info(ctx.guild.id)
         voice.stop()
 
@@ -227,10 +223,12 @@ async def play_command(ctx: commands.Context, *, link: Optional[str] = None):
         return await ctx.message.add_reaction("✔")
 
     elif voice.is_playing():
-        if not link:
+        if len(link) == 0:
             return await ctx.message.add_reaction("✔")
 
         voice.stop()
+
+    link = link[0]
     tracks = await get_audio(link)
     functions.write_tracks(ctx.guild.id, tracks)
 
@@ -378,3 +376,69 @@ async def queue_command(ctx: commands.Context, *, page: Optional[int] = None):
     await ctx.send(embed=embed)
 
     await ctx.message.add_reaction("✔")
+
+
+@client.command(name="add", aliases=["add_to_queue"])
+@commands.guild_only()
+async def add_to_queue_command(ctx: commands.Context, *name):
+
+    await ctx.message.add_reaction("🎧")
+
+    reactions = ctx.message.reactions
+    if reactions is not []:
+        for reaction in reactions:
+            if reaction.emoji == "▶":
+                await ctx.message.remove_reaction("▶", client.user)
+                break
+
+    name = " ".join(name)
+    voice = ctx.voice_client
+    if not ctx.author.voice:
+        embed = functions.create_error_embed(
+            message="You have to be connected to voice channel"
+        )
+        await ctx.send(embed=embed)
+
+        return await ctx.message.add_reaction("❌")
+
+    try:
+        track = await get_single_audio(name)
+        functions.add_track(ctx.guild.id, track)
+
+        await ctx.message.add_reaction("✔")
+
+    except NoTracksFound:
+        embed = functions.create_error_embed(
+            message=f"No tracks founded for you request {name}"
+        )
+        await ctx.send(embed=embed)
+
+        return await ctx.message.add_reaction("❌")
+
+    except Exception as err:
+        print(f"error: {err}")
+        embed = functions.create_error_embed(
+            message=f"Unknown error while processing request {name}"
+        )
+        await ctx.send(embed=embed)
+
+        return await ctx.message.add_reaction("❌")
+
+    if not voice or not voice.is_connected() or not (voice.is_paused() or voice.is_playing()):
+
+        await _join(ctx=ctx)
+        voice = ctx.voice_client
+
+        voice.play(discord.FFmpegPCMAudio(source=track["url"]),
+                   after=lambda x: play_next(x, voice, ctx))
+        embed = functions.create_music_embed(
+            title="Now playing",
+            description=track["name"]
+        )
+        await ctx.send(embed=embed)
+    else:
+        embed = functions.create_music_embed(
+            title="Track added to queue",
+            description=track["name"]
+        )
+        await ctx.send(embed=embed)

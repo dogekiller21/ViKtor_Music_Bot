@@ -56,3 +56,23 @@ async def get_audio(url: str) -> list:
         }
         )
     return tracks
+
+
+class NoTracksFound(Exception):
+    pass
+
+
+async def get_single_audio(name: str) -> dict:
+    result = await api.get_context().api_request(
+        method_name="audio.search", params={"q": name, "count": 1}
+    )
+    items = result["response"]["items"]
+    if len(items) == 0:
+        raise NoTracksFound(f"No tracks matches request {name}")
+    item = items[0]
+    name = f"{item['title']} - {item['artist']}"
+    return {
+        "url": item["url"],
+        "name": name,
+        "duration": item["duration"]
+    }

@@ -32,6 +32,24 @@ def write_tracks(guild_id, track_list: list):
         json.dump(info, file, indent=2, ensure_ascii=False)
 
 
+def add_track(guild_id, track: dict):
+    with open("tracks.json", "r", encoding="utf-8") as file:
+        info = json.load(file)
+        if str(guild_id) in info["guilds"]:
+            guild_info = info["guilds"][str(guild_id)]
+        else:
+            info["guilds"][str(guild_id)] = {
+                "tracks": [],
+                "now_playing_index": 0
+            }
+            guild_info = info["guilds"][str(guild_id)]
+
+        guild_info["tracks"].append(track)
+
+    with open("tracks.json", "w", encoding="utf-8") as file:
+        json.dump(info, file, indent=2, ensure_ascii=False)
+
+
 def delete_info(guild_id):
     with open("tracks.json", "r", encoding="utf-8") as file:
         info = json.load(file)
