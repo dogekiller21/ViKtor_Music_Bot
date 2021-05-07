@@ -206,6 +206,14 @@ async def play_command(ctx: commands.Context, *link: Optional[str]):
         return await add_to_queue_command(ctx, *link)
 
     voice = ctx.voice_client
+
+    if not voice and (len(link) == 0):
+        embed = functions.create_error_embed(
+            message="Add link or name of the track to command"
+        )
+        await ctx.message.add_reaction("❌")
+        return await ctx.send(embed=embed)
+
     if not voice or not voice.is_connected():
         await _join(ctx)
         voice = ctx.voice_client
@@ -442,3 +450,29 @@ async def add_to_queue_command(ctx: commands.Context, *name):
             description=track["name"]
         )
         await ctx.send(embed=embed)
+
+
+@client.command(name="delete", aliases=["remove"], pass_context=True)
+@commands.guild_only()
+async def delete_command(ctx: commands.Context, index: int):
+    await ctx.message.add_reaction("💔")
+    tracks_info = functions.get_tracks(ctx.guild.id)
+    tracks, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
+
+    if (index <= 0) or (index > len(tracks)):
+        embed = functions.create_error_embed(
+            message="Incorrect index passed"
+        )
+        await ctx.message.add_reaction("❌")
+        return await ctx.send(embed=embed)
+
+    functions.delete_single_track(ctx.guild.id, index)
+    if index - 1 == now_playing:
+        if len(tracks) == 1:
+            functions.delete_info(ctx.guild.id)
+        else:
+            functions.change_index(ctx.guild.id, now_playing - 1)
+        voice = ctx.voice_client
+        voice.stop()
+
+    await ctx.message.add_reaction("✔")
