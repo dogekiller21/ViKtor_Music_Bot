@@ -18,25 +18,9 @@ def create_error_embed(
 
 def create_music_embed(
         *,
-        title: str,
-        description: str,
-        image: Optional[str] = None
-) -> discord.Embed:
-    embed = discord.Embed(
-        title=title,
-        description=description,
-        color=0xffa033
-    )
-    if image is not None:
-        embed.set_thumbnail(url=image)
-    return embed
-
-
-def create_queue_embed(
-        *,
         title: Optional[str] = None,
         description: str,
-        pages: Optional[str] = None,
+        footer: Optional[str] = None,
         image: Optional[str] = None
 ) -> discord.Embed:
     embed = discord.Embed(
@@ -45,8 +29,8 @@ def create_queue_embed(
     )
     if title is not None:
         embed.title = title
-    if pages is not None:
-        embed.set_footer(text=pages)
+    if footer is not None:
+        embed.set_footer(text=footer)
     if image is not None:
         embed.set_thumbnail(url=image)
     return embed

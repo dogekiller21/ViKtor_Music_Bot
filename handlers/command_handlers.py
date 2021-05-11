@@ -1,15 +1,15 @@
 import asyncio
-
+from typing import Optional
 import discord
 
 from bot import client
 import functions
 
-from typing import Optional
 
 from discord.ext import commands
-
-from vk_parsing import get_audio, get_single_audio, NoTracksFound
+from vk_parsing import get_audio, get_single_audio
+from utils import embed_utils
+from utils.custom_exceptions import NoTracksFound
 
 
 def check_if_admin(ctx: commands.Context):
@@ -39,7 +39,7 @@ async def admin_command(ctx: commands.Context, member: discord.Member):
         )
         await ctx.send(embed=embed)
     else:
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message=f"Пользователь {member.mention} уже является администратором"
         )
         await ctx.send(embed=embed)
@@ -50,7 +50,7 @@ async def admin_command(ctx: commands.Context, member: discord.Member):
 @commands.check(check_if_owner)
 async def user_command(ctx: commands.Context, member: discord.Member):
     if member.id == ctx.guild.owner.id:
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message="Вы не можете забрать права администратора у владельца сервера"
         )
         return await ctx.send(embed=embed)
@@ -58,12 +58,12 @@ async def user_command(ctx: commands.Context, member: discord.Member):
 
     if member.id in guild_admin:
         functions.demote_admin(ctx.guild.id, member.id)
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message=f'Пользователь {member.mention} был разжалован'
         )
         await ctx.send(embed=embed)
     else:
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message=f"Пользователь {member.mention} не является администратором"
         )
         await ctx.send(embed=embed)
@@ -77,7 +77,7 @@ async def welcome_channel_command(ctx: commands.Context, channel_id=None):
         channel_id = ctx.channel.id
         msg_end = f'этом канале'
     elif not channel_id.isdigit():
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message="ID канала может состоять только из цифр"
         )
         return await ctx.send(embed=embed)
@@ -148,18 +148,18 @@ def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
         print(error)
     tracks_info = functions.get_tracks(ctx.guild.id)
     if tracks_info is not None:
-        tracks, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
+        tracks, now_playing = tracks_info.tracks, tracks_info.now_playing
 
         if (new_index := now_playing + 1) > len(tracks) - 1:
             new_index = 0
         voice.stop()
 
-        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index]["url"]),
+        voice.play(discord.FFmpegPCMAudio(source=tracks[new_index].url),
                    after=lambda err: play_next(err, voice, ctx))
         functions.change_index(ctx.guild.id, new_index)
-        embed = functions.create_music_embed(
+        embed = embed_utils.create_music_embed(
             title="Now playing",
-            description=f"{new_index + 1}. {tracks[new_index]['name']}"
+            description=f"{new_index + 1}. {tracks[new_index].name}"
         )
         loop = client.loop
         asyncio.run_coroutine_threadsafe(ctx.send(embed=embed), loop)
@@ -176,7 +176,7 @@ async def leave_command(ctx: commands.Context):
         await voice.disconnect()
         await ctx.message.add_reaction("✔")
     else:
-        embed = functions.create_error_embed("Not connected to any voice channel")
+        embed = embed_utils.create_error_embed("Not connected to any voice channel")
 
         await ctx.send(embed=embed)
 
@@ -184,7 +184,7 @@ async def leave_command(ctx: commands.Context):
 
 
 async def nothing_is_playing_error(ctx: commands.Context):
-    embed = functions.create_error_embed("Nothing is playing")
+    embed = embed_utils.create_error_embed("Nothing is playing")
     await ctx.send(embed=embed)
 
     await ctx.message.add_reaction("❌")
@@ -196,7 +196,7 @@ async def play_command(ctx: commands.Context, *link: Optional[str]):
     await ctx.message.add_reaction("▶")
 
     if not ctx.author.voice:
-        embed = functions.create_error_embed("You have to be connected to voice channel")
+        embed = embed_utils.create_error_embed("You have to be connected to voice channel")
 
         await ctx.send(embed=embed)
 
@@ -208,7 +208,7 @@ async def play_command(ctx: commands.Context, *link: Optional[str]):
     voice = ctx.voice_client
 
     if not voice and (len(link) == 0):
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message="Add link or name of the track to command"
         )
         await ctx.message.add_reaction("❌")
@@ -248,7 +248,7 @@ async def play_command(ctx: commands.Context, *link: Optional[str]):
     else:
         description = f"{tracks[0]['name']}"
 
-    embed = functions.create_music_embed(
+    embed = embed_utils.create_music_embed(
         title="Now playing",
         description=description
     )
@@ -298,7 +298,7 @@ async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
         if tracks_info is None:
             return await nothing_is_playing_error(ctx)
 
-        tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
+        tracks, index = tracks_info.tracks, tracks_info.now_playing
         if (new_index := index + count) > len(tracks):
             new_index = 0
 
@@ -323,7 +323,7 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
         if tracks_info is None:
             return await nothing_is_playing_error(ctx)
 
-        tracks, index = tracks_info["tracks"], tracks_info["now_playing"]
+        tracks, index = tracks_info.tracks, tracks_info.now_playing
         if (new_index := index - count) < 0:
             new_index = len(tracks) - 1
 
@@ -341,12 +341,18 @@ async def queue_command(ctx: commands.Context, *, page: Optional[int] = None):
 
     tracks_info = functions.get_tracks(ctx.guild.id)
     if tracks_info is None:
-        embed = functions.create_error_embed("Queue is empty")
+        embed = embed_utils.create_error_embed("Queue is empty")
         await ctx.send(embed=embed)
 
         return await ctx.message.add_reaction("❌")
 
-    track_list, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
+    track_list, now_playing = tracks_info.tracks, tracks_info.now_playing
+
+    if (len(track_list) % 10) == 0:
+        pages = int(len(track_list) / 10)
+    else:
+        pages = int((len(track_list) / 10)) + 1
+
     if page is None:
         if ((now_playing + 1) / 10) != 0:
             page = (now_playing + 1) // 10 + 1
@@ -356,29 +362,33 @@ async def queue_command(ctx: commands.Context, *, page: Optional[int] = None):
         page_index = 0
     else:
         page_index = (page - 1) * 10
+
+    if page > pages:
+        embed = embed_utils.create_error_embed("No such page in your queue")
+        await ctx.send(embed=embed)
+
+        return await ctx.message.add_reaction("❌")
+
     tracks = []
     for i, track in enumerate(track_list[page_index::]):
         if i == 10:
             break
-        track_index = i + (page - 1) * 10
+        track_index = i + page_index
         tracks.append(
-            f"**{track_index + 1}. {track['name']}**"
+            f"**{track_index + 1}. {track.name}**"
         )
         if track_index == now_playing:
             tracks[-1] += "\n↑ now playing ↑"
 
-    pages = None
-    if (length := len(track_list)) > 10:
-        if length % 10 != 0:
-            pages = length // 10 + 1
-        else:
-            pages = length // 10
+    if (len(track_list)) > 10:
         pages = f"Page: {page} / {pages}"
+    else:
+        pages = None
 
-    embed = functions.create_queue_embed(
+    embed = embed_utils.create_music_embed(
         description="\n\n".join(tracks),
         image="https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png",
-        pages=pages
+        footer=pages
     )
 
     await ctx.send(embed=embed)
@@ -402,7 +412,7 @@ async def add_to_queue_command(ctx: commands.Context, *name):
     name = " ".join(name)
     voice = ctx.voice_client
     if not ctx.author.voice:
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message="You have to be connected to voice channel"
         )
         await ctx.send(embed=embed)
@@ -416,7 +426,7 @@ async def add_to_queue_command(ctx: commands.Context, *name):
         await ctx.message.add_reaction("✔")
 
     except NoTracksFound:
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message=f"No tracks founded for you request {name}"
         )
         await ctx.send(embed=embed)
@@ -425,7 +435,7 @@ async def add_to_queue_command(ctx: commands.Context, *name):
 
     except Exception as err:
         print(f"error: {err}")
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message=f"Unknown error while processing request {name}"
         )
         await ctx.send(embed=embed)
@@ -439,13 +449,13 @@ async def add_to_queue_command(ctx: commands.Context, *name):
 
         voice.play(discord.FFmpegPCMAudio(source=track["url"]),
                    after=lambda x: play_next(x, voice, ctx))
-        embed = functions.create_music_embed(
+        embed = embed_utils.create_music_embed(
             title="Now playing",
             description=track["name"]
         )
         await ctx.send(embed=embed)
     else:
-        embed = functions.create_music_embed(
+        embed = embed_utils.create_music_embed(
             title="Track added to queue",
             description=track["name"]
         )
@@ -457,10 +467,10 @@ async def add_to_queue_command(ctx: commands.Context, *name):
 async def delete_command(ctx: commands.Context, index: int):
     await ctx.message.add_reaction("💔")
     tracks_info = functions.get_tracks(ctx.guild.id)
-    tracks, now_playing = tracks_info["tracks"], tracks_info["now_playing"]
+    tracks, now_playing = tracks_info.tracks, tracks_info.now_playing
 
     if (index <= 0) or (index > len(tracks)):
-        embed = functions.create_error_embed(
+        embed = embed_utils.create_error_embed(
             message="Incorrect index passed"
         )
         await ctx.message.add_reaction("❌")
@@ -474,5 +484,9 @@ async def delete_command(ctx: commands.Context, index: int):
             functions.change_index(ctx.guild.id, now_playing - 1)
         voice = ctx.voice_client
         voice.stop()
+    embed = embed_utils.create_music_embed(
+        description=f"Track deleted: {tracks[index - 1].name}"
+    )
 
     await ctx.message.add_reaction("✔")
+    await ctx.send(embed=embed)

@@ -1,5 +1,19 @@
 import json
-from typing import Union
+from dataclasses import dataclass
+from typing import Union, List
+
+
+@dataclass
+class SingleTrackInfo:
+    url: str
+    name: str
+    duration: int
+
+
+@dataclass
+class AllTracksInfo:
+    tracks: List[SingleTrackInfo]
+    now_playing: int
 
 
 def get_from_file():
@@ -12,17 +26,17 @@ def write_to_file(data):
         json.dump(data, file, indent=2, ensure_ascii=False)
 
 
-def get_tracks(guild_id) -> Union[dict, None]:
+def get_tracks(guild_id) -> Union[AllTracksInfo, None]:
     info = get_from_file()["guilds"]
     guild_id = str(guild_id)
 
     if guild_id in info:
         tracks = info[guild_id]["tracks"]
-        not_playing = info[guild_id]["now_playing_index"]
-        return {
-            "tracks": tracks,
-            "now_playing": not_playing
-        }
+        now_playing = info[guild_id]["now_playing_index"]
+        tracks = [SingleTrackInfo(**track) for track in tracks]
+        all_tracks = AllTracksInfo(tracks, now_playing)
+
+        return all_tracks
     else:
         return
 

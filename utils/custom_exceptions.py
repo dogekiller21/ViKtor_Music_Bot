@@ -1,0 +1,4 @@
+
+
+class NoTracksFound(Exception):
+    pass

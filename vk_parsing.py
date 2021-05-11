@@ -3,6 +3,7 @@ from vkwave.api import API
 
 from vkwave.client import AIOHTTPClient
 
+from utils.custom_exceptions import NoTracksFound
 
 client = AIOHTTPClient()
 
@@ -56,10 +57,6 @@ async def get_audio(url: str) -> list:
         }
         )
     return tracks
-
-
-class NoTracksFound(Exception):
-    pass
 
 
 async def get_single_audio(name: str) -> dict:
