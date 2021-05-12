@@ -2,14 +2,16 @@ import discord
 
 from bot import client
 import functions
+from utils.tracks_utils import clear_info
+from utils import embed_utils, tracks_utils
 
 
 @client.event
 async def on_ready():
-    print('We have logged in as {0.user}'.format(client))
+    print(f'We have logged in as {client.user}')
 
     # clearing information about tracks
-    functions.clear_info()
+    clear_info()
 
 
 @client.event
@@ -19,7 +21,7 @@ async def on_guild_join(guild):
     first_text_channel = guild.text_channels[0].id
     functions.save_new_guild(guild_id=guild_id, owner_id=owner_id, welcome_channel=first_text_channel)
     owner = client.get_user(owner_id)
-    me = client.get_user(242678412983009281)
+    me = client.get_user(242678412983009281)  # delete this before using
     message = discord.Embed(
         title=f'Я был приглашен на твой сервер {guild.name}',
         description='Я умею:\n'
@@ -35,7 +37,7 @@ async def on_guild_join(guild):
                     'роль с правом выдачи других ролей и переместить ее выше остальных\n'
                     'Рекомендуется выдать боту роль с правами администратора\n\n'
                     '2) Проигрывать музыку из ВК\n'
-                    'Для проигрывания плейлиста или альбома: -play <link>\n'
+                    'Для проигрывания плейлиста или трека: -play <link|name>\n'
                     'Добавить одиночный трек в очередь: -add <name>\n'
                     'Пропустить трек: -skip <кол-во> (по стандарту 1)\n'
                     'Предыдущий трек: -prev <кол-во> (по стандарту 1)\n'
@@ -45,7 +47,7 @@ async def on_guild_join(guild):
                     'Заставить бота выйти из канала: -leave',
         color=0x0a7cff
     )
-    message.set_footer(text=me.name, icon_url=me.avatar_url)
+    message.set_footer(text=me.name, icon_url=me.avatar_url)  # delete this too
     await owner.send(embed=message)
 
 
@@ -59,7 +61,7 @@ async def on_member_join(member):
         try:
             await member.add_roles(user_role)
         except Exception as err:
-            embed = functions.create_error_embed(
+            embed = embed_utils.create_error_embed(
                 message=f'Невозможно выдать роль {user_role.mention} участнику {member.mention}'
             )
             await msg_channel.send(embed=embed)
@@ -71,3 +73,14 @@ async def on_member_join(member):
     )
 
     await msg_channel.send(embed=message)
+
+
+# Auto self deaf
+@client.event
+async def on_voice_state_update(member, before, after):
+    if member == client.user:
+        if not after.deaf:
+            await member.edit(deafen=True)
+        if not member.guild.voice_client.is_connected():
+            tracks_utils.delete_info(member.guild.id)
+

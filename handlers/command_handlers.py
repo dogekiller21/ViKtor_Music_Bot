@@ -5,10 +5,9 @@ import discord
 from bot import client
 import functions
 
-
 from discord.ext import commands
 from vk_parsing import get_audio, get_single_audio
-from utils import embed_utils
+from utils import embed_utils, tracks_utils
 from utils.custom_exceptions import NoTracksFound
 
 
@@ -146,7 +145,7 @@ async def _join(ctx: commands.Context):
 def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
     if error is not None:
         print(error)
-    tracks_info = functions.get_tracks(ctx.guild.id)
+    tracks_info = tracks_utils.get_tracks(ctx.guild.id)
     if tracks_info is not None:
         tracks, now_playing = tracks_info.tracks, tracks_info.now_playing
 
@@ -156,7 +155,7 @@ def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
 
         voice.play(discord.FFmpegPCMAudio(source=tracks[new_index].url),
                    after=lambda err: play_next(err, voice, ctx))
-        functions.change_index(ctx.guild.id, new_index)
+        tracks_utils.change_index(ctx.guild.id, new_index)
         embed = embed_utils.create_music_embed(
             title="Now playing",
             description=f"{new_index + 1}. {tracks[new_index].name}"
@@ -172,7 +171,7 @@ async def leave_command(ctx: commands.Context):
 
     voice = ctx.voice_client
     if voice and voice.is_connected():
-        functions.delete_info(ctx.guild.id)
+        tracks_utils.delete_info(ctx.guild.id)
         await voice.disconnect()
         await ctx.message.add_reaction("✔")
     else:
@@ -221,7 +220,7 @@ async def play_command(ctx: commands.Context, *link: Optional[str]):
         return await nothing_is_playing_error(ctx)
 
     elif (voice.is_playing or voice.is_paused()) and (len(link) != 0):
-        functions.delete_info(ctx.guild.id)
+        tracks_utils.delete_info(ctx.guild.id)
         voice.stop()
 
     elif voice.is_paused():
@@ -238,7 +237,7 @@ async def play_command(ctx: commands.Context, *link: Optional[str]):
 
     link = link[0]
     tracks = await get_audio(link)
-    functions.write_tracks(ctx.guild.id, tracks)
+    tracks_utils.write_tracks(ctx.guild.id, tracks)
 
     voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]),
                after=lambda x: play_next(x, voice, ctx))
@@ -279,7 +278,7 @@ async def stop_command(ctx: commands.Context):
     if voice is None or not (voice.is_playing() or voice.is_paused()):
         await nothing_is_playing_error(ctx)
     elif voice.is_connected():
-        functions.delete_info(ctx.guild.id)
+        tracks_utils.delete_info(ctx.guild.id)
         voice.stop()
 
         await ctx.message.add_reaction("✔")
@@ -294,7 +293,7 @@ async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
         await nothing_is_playing_error(ctx)
 
     else:
-        tracks_info = functions.get_tracks(ctx.guild.id)
+        tracks_info = tracks_utils.get_tracks(ctx.guild.id)
         if tracks_info is None:
             return await nothing_is_playing_error(ctx)
 
@@ -303,7 +302,7 @@ async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
             new_index = 0
 
         # Change index and skip track by stopping playing current one
-        functions.change_index(ctx.guild.id, new_index - 1)
+        tracks_utils.change_index(ctx.guild.id, new_index - 1)
 
         voice.stop()
 
@@ -319,7 +318,7 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
         await nothing_is_playing_error(ctx)
 
     else:
-        tracks_info = functions.get_tracks(ctx.guild.id)
+        tracks_info = tracks_utils.get_tracks(ctx.guild.id)
         if tracks_info is None:
             return await nothing_is_playing_error(ctx)
 
@@ -327,7 +326,7 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
         if (new_index := index - count) < 0:
             new_index = len(tracks) - 1
 
-        functions.change_index(ctx.guild.id, new_index - 1)
+        tracks_utils.change_index(ctx.guild.id, new_index - 1)
 
         voice.stop()
 
@@ -339,7 +338,7 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
 async def queue_command(ctx: commands.Context, *, page: Optional[int] = None):
     await ctx.message.add_reaction("📄")
 
-    tracks_info = functions.get_tracks(ctx.guild.id)
+    tracks_info = tracks_utils.get_tracks(ctx.guild.id)
     if tracks_info is None:
         embed = embed_utils.create_error_embed("Queue is empty")
         await ctx.send(embed=embed)
@@ -399,7 +398,6 @@ async def queue_command(ctx: commands.Context, *, page: Optional[int] = None):
 @client.command(name="add", aliases=["add_to_queue"])
 @commands.guild_only()
 async def add_to_queue_command(ctx: commands.Context, *name):
-
     await ctx.message.add_reaction("🎧")
 
     reactions = ctx.message.reactions
@@ -421,7 +419,7 @@ async def add_to_queue_command(ctx: commands.Context, *name):
 
     try:
         track = await get_single_audio(name)
-        functions.add_track(ctx.guild.id, track)
+        tracks_utils.add_track(ctx.guild.id, track)
 
         await ctx.message.add_reaction("✔")
 
@@ -466,7 +464,7 @@ async def add_to_queue_command(ctx: commands.Context, *name):
 @commands.guild_only()
 async def delete_command(ctx: commands.Context, index: int):
     await ctx.message.add_reaction("💔")
-    tracks_info = functions.get_tracks(ctx.guild.id)
+    tracks_info = tracks_utils.get_tracks(ctx.guild.id)
     tracks, now_playing = tracks_info.tracks, tracks_info.now_playing
 
     if (index <= 0) or (index > len(tracks)):
@@ -476,12 +474,12 @@ async def delete_command(ctx: commands.Context, index: int):
         await ctx.message.add_reaction("❌")
         return await ctx.send(embed=embed)
 
-    functions.delete_single_track(ctx.guild.id, index)
+    tracks_utils.delete_single_track(ctx.guild.id, index)
     if index - 1 == now_playing:
         if len(tracks) == 1:
-            functions.delete_info(ctx.guild.id)
+            tracks_utils.delete_info(ctx.guild.id)
         else:
-            functions.change_index(ctx.guild.id, now_playing - 1)
+            tracks_utils.change_index(ctx.guild.id, now_playing - 1)
         voice = ctx.voice_client
         voice.stop()
     embed = embed_utils.create_music_embed(
