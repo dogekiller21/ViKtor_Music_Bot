@@ -34,3 +34,17 @@ def create_music_embed(
     if image is not None:
         embed.set_thumbnail(url=image)
     return embed
+
+
+def create_info_embed(
+        *,
+        title: Optional[str] = None,
+        description: str,
+) -> discord.Embed:
+    embed = discord.Embed(
+        description=description,
+        color=0x3489eb
+    )
+    if title is not None:
+        embed.title = title
+    return embed

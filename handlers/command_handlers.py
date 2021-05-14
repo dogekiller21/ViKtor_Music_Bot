@@ -11,11 +11,6 @@ from utils import embed_utils, tracks_utils
 from utils.custom_exceptions import NoTracksFound
 
 
-def check_if_admin(ctx: commands.Context):
-    guild_admins = functions.get_guild_smf(ctx.guild.id, "admins")
-    return ctx.message.author.id in guild_admins
-
-
 def check_if_owner(ctx: commands.Context):
     owner_id = ctx.guild.owner.id
     return ctx.message.author.id == owner_id
@@ -25,52 +20,9 @@ def check_if_me(ctx: commands.Context):
     return ctx.message.author.id == 242678412983009281
 
 
-@client.command(name="admin", pass_context=True)
-@commands.guild_only()
-@commands.check(check_if_owner)
-async def admin_command(ctx: commands.Context, member: discord.Member):
-    guild_admins = functions.get_guild_smf(ctx.guild.id, "admins")
-
-    if member.id not in guild_admins:
-        functions.add_new_admin(ctx.guild.id, member.id)
-        embed = discord.Embed(
-            description=f'Пользователь {member.mention} назначен администратором'
-        )
-        await ctx.send(embed=embed)
-    else:
-        embed = embed_utils.create_error_embed(
-            message=f"Пользователь {member.mention} уже является администратором"
-        )
-        await ctx.send(embed=embed)
-
-
-@client.command(name="user", pass_context=True)
-@commands.guild_only()
-@commands.check(check_if_owner)
-async def user_command(ctx: commands.Context, member: discord.Member):
-    if member.id == ctx.guild.owner.id:
-        embed = embed_utils.create_error_embed(
-            message="Вы не можете забрать права администратора у владельца сервера"
-        )
-        return await ctx.send(embed=embed)
-    guild_admin = functions.get_guild_smf(ctx.guild.id, "admins")
-
-    if member.id in guild_admin:
-        functions.demote_admin(ctx.guild.id, member.id)
-        embed = embed_utils.create_error_embed(
-            message=f'Пользователь {member.mention} был разжалован'
-        )
-        await ctx.send(embed=embed)
-    else:
-        embed = embed_utils.create_error_embed(
-            message=f"Пользователь {member.mention} не является администратором"
-        )
-        await ctx.send(embed=embed)
-
-
 @client.command(name="welcome_channel", pass_context=True)
 @commands.guild_only()
-@commands.check(check_if_admin)
+@commands.check(check_if_owner)
 async def welcome_channel_command(ctx: commands.Context, channel_id=None):
     if not channel_id:
         channel_id = ctx.channel.id
@@ -94,7 +46,7 @@ async def welcome_channel_command(ctx: commands.Context, channel_id=None):
 
 @client.command(name="welcome_role", pass_context=True)
 @commands.guild_only()
-@commands.check(check_if_admin)
+@commands.check(check_if_owner)
 async def welcome_role_command(ctx: commands.Context, role: Optional[discord.Role]):
     if not role:
         role_id = functions.get_guild_smf(ctx.guild.id, "welcome_role_id")
@@ -148,9 +100,20 @@ def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
     tracks_info = tracks_utils.get_tracks(ctx.guild.id)
     if tracks_info is not None:
         tracks, now_playing = tracks_info.tracks, tracks_info.now_playing
+        loop = client.loop
 
         if (new_index := now_playing + 1) > len(tracks) - 1:
-            new_index = 0
+            args = {
+                "ctx": ctx,
+                "voice_client": voice,
+                "default": 0
+            }
+            new_index = asyncio.run_coroutine_threadsafe(
+                queue_index_overflow(**args),
+                loop
+            ).result()
+        if new_index is None:
+            return
         voice.stop()
 
         voice.play(discord.FFmpegPCMAudio(source=tracks[new_index].url),
@@ -160,7 +123,7 @@ def play_next(error, voice: discord.VoiceClient, ctx: commands.Context):
             title="Now playing",
             description=f"{new_index + 1}. {tracks[new_index].name}"
         )
-        loop = client.loop
+
         asyncio.run_coroutine_threadsafe(ctx.send(embed=embed), loop)
 
 
@@ -219,7 +182,7 @@ async def play_command(ctx: commands.Context, *link: Optional[str]):
     elif (len(link) == 0) and not (voice.is_playing() or voice.is_paused()):
         return await nothing_is_playing_error(ctx)
 
-    elif (voice.is_playing or voice.is_paused()) and (len(link) != 0):
+    elif (voice.is_playing() or voice.is_paused()) and (len(link) != 0):
         tracks_utils.delete_info(ctx.guild.id)
         voice.stop()
 
@@ -284,6 +247,28 @@ async def stop_command(ctx: commands.Context):
         await ctx.message.add_reaction("✔")
 
 
+async def queue_index_overflow(
+        ctx: commands.Context,
+        voice_client: discord.VoiceClient,
+        default: int
+):
+
+    is_looping = functions.get_guild_smf(ctx.guild.id, "loop_queue")
+    if is_looping:
+        new_index = default
+    else:
+        embed = embed_utils.create_info_embed(
+            description="Queue loop is disabled in your guild\n"
+                        "Deleting queue"
+        )
+        await ctx.send(embed=embed)
+        tracks_utils.delete_info(ctx.guild.id)
+        new_index = None
+    voice_client.stop()
+    await ctx.message.add_reaction("✔")
+    return new_index
+
+
 @client.command(name="skip")
 @commands.guild_only()
 async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
@@ -298,15 +283,16 @@ async def skip_command(ctx: commands.Context, *, count: Optional[int] = 1):
             return await nothing_is_playing_error(ctx)
 
         tracks, index = tracks_info.tracks, tracks_info.now_playing
-        if (new_index := index + count) > len(tracks):
-            new_index = 0
-
-        # Change index and skip track by stopping playing current one
-        tracks_utils.change_index(ctx.guild.id, new_index - 1)
-
-        voice.stop()
-
-        await ctx.message.add_reaction("✔")
+        if (new_index := index + count) > len(tracks)-1:
+            new_index = await queue_index_overflow(
+                ctx=ctx,
+                voice_client=voice,
+                default=0
+            )
+        if new_index is not None:
+            tracks_utils.change_index(ctx.guild.id, new_index - 1)
+            voice.stop()
+            await ctx.message.add_reaction("✔")
 
 
 @client.command(name="prev")
@@ -324,13 +310,15 @@ async def prev_command(ctx: commands.Context, *, count: Optional[int] = 1):
 
         tracks, index = tracks_info.tracks, tracks_info.now_playing
         if (new_index := index - count) < 0:
-            new_index = len(tracks) - 1
-
-        tracks_utils.change_index(ctx.guild.id, new_index - 1)
-
-        voice.stop()
-
-        await ctx.message.add_reaction("✔")
+            new_index =  await queue_index_overflow(
+                ctx=ctx,
+                voice_client=voice,
+                default=len(tracks) - 1
+            )
+        if new_index is not None:
+            tracks_utils.change_index(ctx.guild.id, new_index - 1)
+            voice.stop()
+            await ctx.message.add_reaction("✔")
 
 
 @client.command(name="queue")
@@ -400,15 +388,6 @@ async def queue_command(ctx: commands.Context, *, page: Optional[int] = None):
 async def add_to_queue_command(ctx: commands.Context, *name):
     await ctx.message.add_reaction("🎧")
 
-    reactions = ctx.message.reactions
-    if reactions is not []:
-        for reaction in reactions:
-            if reaction.emoji == "▶":
-                await ctx.message.remove_reaction("▶", client.user)
-                break
-
-    name = " ".join(name)
-    voice = ctx.voice_client
     if not ctx.author.voice:
         embed = embed_utils.create_error_embed(
             message="You have to be connected to voice channel"
@@ -417,6 +396,8 @@ async def add_to_queue_command(ctx: commands.Context, *name):
 
         return await ctx.message.add_reaction("❌")
 
+    voice = ctx.voice_client
+    name = " ".join(name)
     try:
         track = await get_single_audio(name)
         tracks_utils.add_track(ctx.guild.id, track)
@@ -425,7 +406,7 @@ async def add_to_queue_command(ctx: commands.Context, *name):
 
     except NoTracksFound:
         embed = embed_utils.create_error_embed(
-            message=f"No tracks founded for you request {name}"
+            message=f"No tracks founded for you request **{name}**"
         )
         await ctx.send(embed=embed)
 
@@ -434,7 +415,7 @@ async def add_to_queue_command(ctx: commands.Context, *name):
     except Exception as err:
         print(f"error: {err}")
         embed = embed_utils.create_error_embed(
-            message=f"Unknown error while processing request {name}"
+            message=f"Unknown error while processing request **{name}**"
         )
         await ctx.send(embed=embed)
 
@@ -488,3 +469,42 @@ async def delete_command(ctx: commands.Context, index: int):
 
     await ctx.message.add_reaction("✔")
     await ctx.send(embed=embed)
+
+
+@client.command(name="jump", pass_context=True)
+@commands.guild_only()
+async def jump_command(ctx: commands.Context, index: int):
+    voice = ctx.voice_client
+    if not voice or not voice.is_connected():
+        return await nothing_is_playing_error(ctx)
+
+    tracks_info = tracks_utils.get_tracks(ctx.guild.id)
+    tracks = tracks_info.tracks
+    if index > len(tracks) or index <= 0:
+        embed = embed_utils.create_error_embed(
+            message=f"Incorrect index passed. Max index is {len(tracks)}"
+        )
+        await ctx.send(embed=embed)
+        return await ctx.message.add_reaction("✔")
+    tracks_utils.change_index(ctx.guild.id, index - 2)
+    voice.stop()
+
+
+@client.command(name="loop", pass_context=True)
+@commands.guild_only()
+async def loop_command(ctx: commands.Context):
+    await ctx.message.add_reaction("🔁")
+    is_looped = functions.get_guild_smf(ctx.guild.id, "loop_queue")
+    functions.change_loop_option(ctx.guild.id, not is_looped)
+    if is_looped:
+        embed = embed_utils.create_info_embed(
+            description="Loop option set as False\n"
+                        "Queue in your guild is not looped now"
+        )
+    else:
+        embed = embed_utils.create_info_embed(
+            description="Loop option set as True\n"
+                        "Queue in your guilds is looped now"
+        )
+    await ctx.send(embed=embed)
+    await ctx.message.add_reaction("✔")

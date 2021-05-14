@@ -30,24 +30,15 @@ def write_welcome_role(guild_id: int, welcome_role_id: int):
     save_info(all_data)
 
 
-def add_new_admin(guild_id: int, user_id: int):
+def change_loop_option(
+        guild_id: int,
+        new_loop_option
+):
     all_data = get_info()
-    guilds_info = all_data["data"]["guilds"]
 
-    if user_id not in guilds_info[str(guild_id)]['admins']:
-        guilds_info[str(guild_id)]['admins'].append(user_id)
+    all_data["data"]["guilds"][str(guild_id)]["loop_queue"] = new_loop_option
 
-        save_info(all_data)
-
-
-def demote_admin(guild_id: int, user_id: int):
-    all_data = get_info()
-    guilds_info = all_data["data"]["guilds"]
-
-    if user_id in guilds_info[str(guild_id)]['admins']:
-        guilds_info[str(guild_id)]['admins'].remove(user_id)
-
-        save_info(all_data)
+    save_info(all_data)
 
 
 def save_new_guild(
@@ -64,5 +55,6 @@ def save_new_guild(
             'owner_id': owner_id,
             'welcome_channel_id': welcome_channel,
             'welcome_role_id': welcome_role,
-            'admins': [owner_id]
+            "loop_queue": False
         }
+    save_info(all_data)

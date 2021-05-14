@@ -24,16 +24,13 @@ async def on_guild_join(guild):
     me = client.get_user(242678412983009281)  # delete this before using
     message = discord.Embed(
         title=f'Я был приглашен на твой сервер {guild.name}',
-        description='Я умею:\n'
+        description='Бот(я) умеет:\n'
                     '1) Приветствовать новых пользователей и выдавать им роли.\n'
                     'Чтобы настроить канал для приветствий: -welcome_channel <id> '
                     '(без id будет выбран канал, в котором было отправлено сообщение)\n'
                     'Чтобы настроить роль для новых пользователей: -welcome_role <role> '
                     '(без упоминания информация о текущих настройках)\n\n'
-                    'Управлять этим могут только администраторы и создатель\n'
-                    '-admin <user> - назначить администратора\n'
-                    '-user <user> - забрать права администратора\n'
-                    '\nЧтобы бот имел возможность выдавать роли, ему нужно выдать '
+                    'Чтобы бот имел возможность выдавать роли, ему нужно выдать '
                     'роль с правом выдачи других ролей и переместить ее выше остальных\n'
                     'Рекомендуется выдать боту роль с правами администратора\n\n'
                     '2) Проигрывать музыку из ВК\n'
@@ -81,6 +78,7 @@ async def on_voice_state_update(member, before, after):
     if member == client.user:
         if not after.deaf:
             await member.edit(deafen=True)
-        if not member.guild.voice_client.is_connected():
-            tracks_utils.delete_info(member.guild.id)
+        voice = member.guild.voice_client
+        if voice and not voice.is_connected() and after.channel is None:
 
+            tracks_utils.delete_info(member.guild.id)
