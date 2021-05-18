@@ -1,17 +1,27 @@
 import discord
+import asyncio
 
 from bot import client
 import functions
-from utils.tracks_utils import clear_info
+from utils.tracks_utils import clear_info, clear_all_queue_info
 from utils import embed_utils, tracks_utils
+
+from .command_handlers import (play_command,
+                               pause_command,
+                               skip_command,
+                               prev_command,
+                               stop_command,
+                               loop_command,
+                               shuffle_command)
 
 
 @client.event
 async def on_ready():
     print(f'We have logged in as {client.user}')
 
-    # clearing information about tracks
+    # clearing information about tracks and queue messages
     clear_info()
+    clear_all_queue_info()
 
 
 @client.event
@@ -74,11 +84,56 @@ async def on_member_join(member):
 
 # Auto self deaf
 @client.event
-async def on_voice_state_update(member, before, after):
+async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    voice = member.guild.voice_client
     if member == client.user:
         if not after.deaf:
             await member.edit(deafen=True)
-        voice = member.guild.voice_client
         if voice and not voice.is_connected() and after.channel is None:
-
             tracks_utils.delete_info(member.guild.id)
+    else:
+        if before.channel is None:
+            return
+        members = before.channel.members
+        if voice is None:
+            return
+        if before.channel == member.guild.voice_client.channel:
+            if (len(members) == 1) and client.user in members:
+                await asyncio.sleep(15)
+
+                updated_members = voice.channel.members
+                if (len(updated_members) == 1) and client.user in updated_members:
+                    tracks_utils.delete_info(member.guild.id)
+                    await voice.disconnect()
+
+
+@client.event
+async def on_reaction_add(reaction: discord.Reaction, user: discord.Member):
+
+    if reaction.message.author == client.user and user != client.user:
+        ctx = await client.get_context(reaction.message)
+
+        if reaction.emoji == "⏪":
+            await prev_command(ctx)
+
+        if reaction.emoji == "▶":
+            voice = ctx.voice_client
+            if voice:
+                if voice.is_playing():
+                    await pause_command(ctx)
+                elif voice.is_paused():
+                    await play_command(ctx)
+
+        elif reaction.emoji == "⏩":
+            await skip_command(ctx)
+
+        elif reaction.emoji == "⏹":
+            await stop_command(ctx)
+            await reaction.message.delete(delay=5)
+
+        elif reaction.emoji == "🔁":
+            await loop_command(ctx)
+
+        elif reaction.emoji == "🔀":
+            await shuffle_command(ctx)
+
