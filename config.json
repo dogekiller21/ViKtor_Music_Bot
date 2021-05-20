@@ -1,25 +1,11 @@
 {
   "data": {
     "guilds": {
-      "248145752352620546": {
-        "owner_id": 242678412983009281,
-        "welcome_channel_id": 821406488010031164,
-        "welcome_role_id": 630066960918380572,
-        "loop_queue": true,
-        "admins": [
-          242678412983009281,
-          491977515787616256,
-          394758170666467328
-        ]
-      },
-      "821749224739831828": {
-        "owner_id": 242678412983009281,
-        "welcome_channel_id": 821749224739831831,
-        "welcome_role_id": 822464068081156146,
-        "loop_queue": true,
-        "admins": [
-          242678412983009281
-        ]
+      "123": {
+        "owner_id": 123,
+        "welcome_channel_id": 123,
+        "welcome_role_id": 123,
+        "loop_queue": false
       }
     }
   }
