@@ -3,6 +3,7 @@ from random import shuffle
 from typing import Optional
 
 import discord
+from discord import NotFound
 
 from discord.ext import commands
 
@@ -17,6 +18,7 @@ class Player(commands.Cog):
         self.client = client
         self.tracks = {}
         self.queue_messages = {}
+        self.player_messages = {}
         self.loop = self.client.loop
 
     async def nothing_is_playing_error(self, ctx: commands.Context):
@@ -42,7 +44,51 @@ class Player(commands.Cog):
                 page = (now_playing + 1) // 10
         return page, pages
 
-    def create_queue_embed(self, ctx, page: Optional[int] = None):
+    def _get_duration(self, duration: int) -> str:
+        hours = duration // 3600
+        minutes = (duration % 3600) // 60
+        seconds = (duration % 3600) % 60
+        dur = f""
+        if hours != 0:
+            dur += f"{hours}:"
+        dur += f"{minutes:02d}:{seconds:02d}"
+        return dur
+
+    def create_player_embed(self, ctx: commands.Context):
+        embed = embed_utils.create_music_embed(
+            title=f"Player in {ctx.voice_client.channel.name}",
+            description="",
+            image="https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png"
+        )
+
+        now_playing = self.tracks[ctx.guild.id]["index"]
+        tracks = self.tracks[ctx.guild.id]["tracks"]
+        prev_index, next_index = now_playing - 1, now_playing + 1
+        if prev_index >= 0:
+            dur = self._get_duration(tracks[prev_index]["duration"])
+            embed.add_field(name="Previous track",
+                            value=f"**{prev_index + 1}. {tracks[prev_index]['name']}** {dur}\n",
+                            inline=False)
+
+        voice = ctx.voice_client
+        title = "⟶ Paused ⟵" if voice.is_paused() else "⟶ Now playing ⟵"
+
+        dur = self._get_duration(tracks[now_playing]["duration"])
+        embed.add_field(
+            name=title,
+            value=f"**{now_playing+1}. {tracks[now_playing]['name']}** {dur}",
+            inline=False
+        )
+
+        if next_index < len(tracks):
+            dur = self._get_duration(tracks[next_index]["duration"])
+            embed.add_field(name="Next track",
+                            value=f"\n**{next_index + 1}. {tracks[next_index]['name']}** {dur}",
+                            inline=False)
+
+        return embed
+
+    def create_queue_embed(self, ctx: commands.Context, page: Optional[int] = None):
         voice = ctx.voice_client
         if voice.is_paused():
             paused = True
@@ -63,13 +109,7 @@ class Player(commands.Cog):
             if i == 10:
                 break
 
-            hours = track["duration"] // 3600
-            minutes = (track["duration"] % 3600) // 60
-            seconds = (track["duration"] % 3600) % 60
-            dur = f""
-            if hours != 0:
-                dur += f"{hours}:"
-            dur += f"{minutes:02d}:{seconds:02d}"
+            dur = self._get_duration(track["duration"])
             track_index = i + page_index
             tracks_to_str.append(
                 f"**{track_index + 1}. {track['name']}** {dur}"
@@ -92,17 +132,29 @@ class Player(commands.Cog):
 
         embed = embed_utils.create_music_embed(
             description="\n\n".join(tracks_to_str),
-            image="https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png",
             footer=pages
         )
         return embed
 
     async def queue_message_update(self, ctx):
+        if ctx.guild.id not in self.queue_messages:
+            return
+        page, _ = self.get_pages(ctx.guild.id)
+        if page != self.queue_messages[ctx.guild.id]["page"]:
+            return
+        embed = self.create_queue_embed(ctx)
+
         try:
-            embed = self.create_queue_embed(ctx)
+            await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
+        except NotFound:
+            return
+
+    async def player_message_update(self, ctx):
+        try:
+            embed = self.create_player_embed(ctx)
         except KeyError:
             return
-        await self.queue_messages[ctx.guild.id].edit(embed=embed)
+        await self.player_messages[ctx.guild.id].edit(embed=embed)
 
     async def queue_index_overflow(
             self,
@@ -122,7 +174,8 @@ class Player(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
 
             del self.tracks[ctx.guild.id]
-            del self.queue_messages[ctx.guild.id]
+
+            await self.delete_messages(ctx.guild.id)
             new_index = None
 
         voice_client.stop()
@@ -163,9 +216,44 @@ class Player(commands.Cog):
                    after=lambda err: self.play_next(err, voice, ctx))
         self.tracks[ctx.guild.id]["index"] = new_index
 
+        asyncio.run_coroutine_threadsafe(self.player_message_update(ctx), self.loop)
         asyncio.run_coroutine_threadsafe(self.queue_message_update(ctx), self.loop)
 
-    @commands.command(name="play")
+    async def delete_messages(self, guild_id):
+        try:
+            await self.queue_messages[guild_id]["message"].delete(delay=2)
+        except (NotFound, KeyError):
+            pass
+        try:
+            await self.player_messages[guild_id].delete(delay=2)
+        except (NotFound, KeyError):
+            pass
+        try:
+            del self.queue_messages[guild_id]
+        except KeyError:
+            pass
+        try:
+            del self.player_messages[guild_id]
+        except KeyError:
+            pass
+
+    @commands.command(name="player", aliases=["Player"])
+    @commands.guild_only()
+    async def player_command(self, ctx: commands.Context):
+        voice = ctx.voice_client
+        if ctx.guild.id not in self.tracks:
+            return await self.nothing_is_playing_error(ctx)
+        if voice is not None:
+            embed = self.create_player_embed(ctx)
+            player_message = await ctx.send(embed=embed)
+            if ctx.guild.id in self.player_messages:
+                await self.player_messages[ctx.guild.id].delete(delay=2)
+            self.player_messages[ctx.guild.id] = player_message
+            emoji_list = ["🔀", "⏪", "▶", "⏩", "⏹", "🔁", "📑"]
+            for emoji in emoji_list:
+                await player_message.add_reaction(emoji)
+
+    @commands.command(name="play", aliases=["Play"])
     @commands.guild_only()
     async def play_command(self, ctx: commands.Context, *link: Optional[str]):
 
@@ -196,11 +284,14 @@ class Player(commands.Cog):
 
         elif (voice.is_playing() or voice.is_paused()) and (len(link) != 0):
             del self.tracks[ctx.guild.id]
-            del self.queue_messages[ctx.guild.id]
+
+            await self.delete_messages(ctx.guild.id)
+
             voice.stop()
 
         elif voice.is_paused():
             voice.resume()
+            await self.player_message_update(ctx)
             return await self.queue_message_update(ctx)
 
         elif voice.is_playing():
@@ -212,7 +303,7 @@ class Player(commands.Cog):
         tracks = await vk_parsing.get_audio(link)
         self.tracks[ctx.guild.id] = {"tracks": tracks, "index": 0}
 
-        await self.queue_command(ctx)
+        await self.player_command(ctx)
 
         voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]),
                    after=lambda x: self.play_next(x, voice, ctx))
@@ -224,6 +315,7 @@ class Player(commands.Cog):
         if not voice.is_playing():
             return await self.nothing_is_playing_error(ctx)
         voice.pause()
+        await self.player_message_update(ctx)
         await self.queue_message_update(ctx)
 
     @commands.command(name="stop")
@@ -234,7 +326,7 @@ class Player(commands.Cog):
             await self.nothing_is_playing_error(ctx)
         if voice.is_connected():
             del self.tracks[ctx.guild.id]
-            del self.queue_messages[ctx.guild.id]
+            await self.delete_messages(ctx.guild.id)
 
             voice.stop()
 
@@ -251,19 +343,18 @@ class Player(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
 
             return await ctx.message.add_reaction("❌")
-        embed = self.create_queue_embed(ctx)
+        embed = self.create_queue_embed(ctx, page)
         queue_message = await ctx.send(embed=embed)
-        if ctx.guild.id not in self.queue_messages:
-            self.queue_messages[ctx.guild.id] = queue_message
-        else:
-            await self.queue_messages[ctx.guild.id].delete(delay=2)
-            self.queue_messages[ctx.guild.id] = queue_message
+        if ctx.guild.id in self.queue_messages:
+            await self.queue_messages[ctx.guild.id]["message"].delete(delay=2)
 
-        emoji_list = ["🔀", "⏪", "▶", "⏩", "⏹", "🔁"]
+        self.queue_messages[ctx.guild.id] = {
+            "message": queue_message,
+            "page": page
+        }
+        emoji_list = ["⬅", "➡"]
         for emoji in emoji_list:
             await queue_message.add_reaction(emoji)
-
-        return queue_message
 
     @commands.command(name="shuffle", pass_context=True)
     @commands.guild_only()
@@ -274,7 +365,8 @@ class Player(commands.Cog):
             if len(tracks) == 1:
                 return
             shuffle(tracks)
-            self.tracks[ctx.guild.id] = {"tracks": tracks, "index": -1}
+            self.tracks[ctx.guild.id] = {"tracks": tracks, "index": - 1}
+            self.queue_messages[ctx.guild.id]["page"] = 1
             voice.stop()
 
     @commands.command(name="skip")
@@ -364,7 +456,7 @@ class Player(commands.Cog):
 
             await self._join(ctx=ctx)
             voice = ctx.voice_client
-            await self.queue_command(ctx)
+            await self.player_command(ctx)
 
             voice.play(discord.FFmpegPCMAudio(source=track["url"]),
                        after=lambda x: self.play_next(x, voice, ctx))
@@ -377,6 +469,7 @@ class Player(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
             try:
                 await self.queue_message_update(ctx)
+                await self.player_message_update(ctx)
             except Exception as err:
                 print(err)
 
@@ -412,6 +505,7 @@ class Player(commands.Cog):
         await ctx.send(embed=embed, delete_after=5)
 
         await self.queue_message_update(ctx)
+        await self.player_message_update(ctx)
 
     @commands.command(name="jump", pass_context=True)
     @commands.guild_only()
@@ -460,9 +554,10 @@ class Player(commands.Cog):
         if voice and voice.is_connected():
             try:
                 del self.tracks[ctx.guild.id]
-                del self.queue_messages[ctx.guild.id]
             except KeyError:
                 pass
+            await self.delete_messages(ctx.guild.id)
+
             await voice.disconnect()
             await ctx.message.add_reaction("✔")
         else:
@@ -504,6 +599,7 @@ class Player(commands.Cog):
                             del self.tracks[member.guild.id]
                         except KeyError:
                             pass
+                        await self.delete_messages(member.guild.id)
                         await voice.disconnect()
 
     @commands.Cog.listener()
@@ -512,36 +608,56 @@ class Player(commands.Cog):
         client = self.client
         if reaction.message.author == user:
             return
-        if reaction.message.guild.id not in self.queue_messages:
-            return
-        if not reaction.message == self.queue_messages[reaction.message.guild.id]:
-            return
-
         ctx = await client.get_context(reaction.message)
+        if reaction.message.guild.id in self.player_messages:
+            if reaction.message == self.player_messages[ctx.guild.id]:
+                if reaction.emoji == "⏪":
+                    return await self.prev_command(ctx)
 
-        if reaction.emoji == "⏪":
-            return await self.prev_command(ctx)
+                if reaction.emoji == "▶":
+                    voice = ctx.voice_client
+                    if voice:
+                        if voice.is_playing():
+                            return await self.pause_command(ctx)
+                        if voice.is_paused():
+                            return await self.play_command(ctx)
 
-        if reaction.emoji == "▶":
-            voice = ctx.voice_client
-            if voice:
-                if voice.is_playing():
-                    return await self.pause_command(ctx)
-                if voice.is_paused():
-                    return await self.play_command(ctx)
+                if reaction.emoji == "⏩":
+                    return await self.skip_command(ctx)
 
-        if reaction.emoji == "⏩":
-            return await self.skip_command(ctx)
+                if reaction.emoji == "⏹":
+                    return await self.stop_command(ctx)
 
-        if reaction.emoji == "⏹":
-            await self.stop_command(ctx)
-            return await reaction.message.delete(delay=5)
+                if reaction.emoji == "🔁":
+                    return await self.loop_command(ctx)
 
-        if reaction.emoji == "🔁":
-            return await self.loop_command(ctx)
+                if reaction.emoji == "🔀":
+                    return await self.shuffle_command(ctx)
 
-        if reaction.emoji == "🔀":
-            return await self.shuffle_command(ctx)
+                if reaction.emoji == "📑":
+                    return await self.queue_command(ctx)
+
+                return
+
+        if reaction.message.guild.id in self.queue_messages:
+
+            if reaction.message == self.queue_messages[ctx.guild.id]["message"]:
+                if reaction.emoji == "⬅":
+                    page = self.queue_messages[ctx.guild.id]["page"]
+                    if page <= 1:
+                        return
+                    _, pages = self.get_pages(ctx.guild.id, page)
+                    embed = self.create_queue_embed(ctx, page - 1)
+                    self.queue_messages[ctx.guild.id]["page"] = page - 1
+                    return await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
+                if reaction.emoji == "➡":
+                    page = self.queue_messages[ctx.guild.id]["page"]
+                    _, pages = self.get_pages(ctx.guild.id, page)
+                    if pages <= 2 or page == pages:
+                        return
+                    embed = self.create_queue_embed(ctx, page + 1)
+                    self.queue_messages[ctx.guild.id]["page"] = page + 1
+                    await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
 
 
 def setup(client):

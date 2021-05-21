@@ -44,7 +44,9 @@ async def on_guild_join(guild):
                     'Приостановить: -pause\n'
                     'Запустить вновь: -play\n'
                     'Прекратить прослушивание: -stop\n'
-                    'Заставить бота выйти из канала: -leave',
+                    'Заставить бота выйти из канала: -leave\n'
+                    'Изменить настройку лупа: -loop\n'
+                    'Перемешать треки: -shuffle',
         color=0x0a7cff
     )
     message.set_footer(text=me.name, icon_url=me.avatar_url)  # delete this too
