@@ -1,3 +1,5 @@
+from typing import Union
+
 from cfg import VK_ME_TOKEN
 from vkwave.api import API
 
@@ -59,17 +61,27 @@ async def get_audio(url: str) -> list:
     return tracks
 
 
-async def get_single_audio(name: str) -> dict:
+async def get_single_audio(name: str, count: int = 1) -> Union[dict, list]:
     result = await api.get_context().api_request(
-        method_name="audio.search", params={"q": name, "count": 1}
+        method_name="audio.search", params={"q": name, "count": count}
     )
     items = result["response"]["items"]
     if len(items) == 0:
         raise NoTracksFound(f"No tracks matches request {name}")
-    item = items[0]
-    name = f"{item['title']} - {item['artist']}"
-    return {
-        "url": item["url"],
-        "name": name,
-        "duration": item["duration"]
-    }
+    if count == 1:
+        item = items[0]
+        name = f"{item['title']} - {item['artist']}"
+        return {
+            "url": item["url"],
+            "name": name,
+            "duration": item["duration"]
+        }
+    items_list = []
+    for item in items[:count]:
+        name = f"{item['title']} - {item['artist']}"
+        items_list.append({
+            "url": item["url"],
+            "name": name,
+            "duration": item["duration"]
+        })
+    return items_list

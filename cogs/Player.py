@@ -76,7 +76,7 @@ class Player(commands.Cog):
         dur = self._get_duration(tracks[now_playing]["duration"])
         embed.add_field(
             name=title,
-            value=f"**{now_playing+1}. {tracks[now_playing]['name']}** {dur}",
+            value=f"**{now_playing + 1}. {tracks[now_playing]['name']}** {dur}",
             inline=False
         )
 
@@ -415,7 +415,7 @@ class Player(commands.Cog):
 
     @commands.command(name="add", aliases=["add_to_queue"])
     @commands.guild_only()
-    async def add_to_queue_command(self, ctx: commands.Context, *name):
+    async def add_to_queue_command(self, ctx: commands.Context, *name, track: Optional[list]):
         await ctx.message.add_reaction("🎧")
 
         if not ctx.author.voice:
@@ -427,51 +427,51 @@ class Player(commands.Cog):
             return await ctx.message.add_reaction("❌")
 
         voice = ctx.voice_client
-        name = " ".join(name)
-        try:
-            track = await vk_parsing.get_single_audio(name)
-            if ctx.guild.id not in self.tracks:
-                self.tracks[ctx.guild.id] = {"tracks": [track], "index": 0}
-            else:
-                self.tracks[ctx.guild.id]["tracks"].append(track)
+        if track is None:
+            name = " ".join(name)
+            try:
+                track = await vk_parsing.get_single_audio(name)
 
-        except NoTracksFound:
-            embed = embed_utils.create_error_embed(
-                message=f"No tracks founded for you request **{name}**"
-            )
-            await ctx.send(embed=embed, delete_after=5)
+            except NoTracksFound:
+                embed = embed_utils.create_error_embed(
+                    message=f"No tracks founded for you request **{name}**"
+                )
+                await ctx.send(embed=embed, delete_after=5)
 
-            return await ctx.message.add_reaction("❌")
+                return await ctx.message.add_reaction("❌")
 
-        except Exception as err:
-            print(f"error: {err}")
-            embed = embed_utils.create_error_embed(
-                message=f"Unknown error while processing request **{name}**"
-            )
-            await ctx.send(embed=embed, delete_after=5)
+            except Exception as err:
+                print(f"error: {err}")
+                embed = embed_utils.create_error_embed(
+                    message=f"Unknown error while processing request **{name}**"
+                )
+                await ctx.send(embed=embed, delete_after=5)
 
-            return await ctx.message.add_reaction("❌")
+                return await ctx.message.add_reaction("❌")
+
+        if ctx.guild.id not in self.tracks:
+            self.tracks[ctx.guild.id] = {"tracks": [track], "index": 0}
+        else:
+            self.tracks[ctx.guild.id]["tracks"].append(track)
 
         if not voice or not voice.is_connected() or not (voice.is_paused() or voice.is_playing()):
-
             await self._join(ctx=ctx)
             voice = ctx.voice_client
             await self.player_command(ctx)
 
-            voice.play(discord.FFmpegPCMAudio(source=track["url"]),
-                       after=lambda x: self.play_next(x, voice, ctx))
+            return voice.play(discord.FFmpegPCMAudio(source=track["url"]),
+                              after=lambda x: self.play_next(x, voice, ctx))
 
-        else:
-            embed = embed_utils.create_music_embed(
-                title="Track added to queue",
-                description=track["name"]
-            )
-            await ctx.send(embed=embed, delete_after=5)
-            try:
-                await self.queue_message_update(ctx)
-                await self.player_message_update(ctx)
-            except Exception as err:
-                print(err)
+        embed = embed_utils.create_music_embed(
+            title="Track added to queue",
+            description=track["name"]
+        )
+        await ctx.send(embed=embed, delete_after=5)
+        try:
+            await self.queue_message_update(ctx)
+            await self.player_message_update(ctx)
+        except Exception as err:
+            print(err)
 
     @commands.command(name="delete", aliases=["remove"], pass_context=True)
     @commands.guild_only()
@@ -545,7 +545,7 @@ class Player(commands.Cog):
             )
         await ctx.send(embed=embed, delete_after=5)
 
-    @commands.command(name="leave")
+    @commands.command(name="leave", pass_context=True)
     @commands.guild_only()
     async def leave_command(self, ctx: commands.Context):
         await ctx.message.add_reaction("🚪")
@@ -566,6 +566,46 @@ class Player(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
 
             await ctx.message.add_reaction("❌")
+
+    @commands.command(name="search")
+    @commands.guild_only()
+    async def search_command(self, ctx: commands.Context, *name):
+        tracks = []
+        name = " ".join(name)
+        try:
+            tracks = await vk_parsing.get_single_audio(name, 10)
+        except NoTracksFound:
+            embed = embed_utils.create_error_embed(
+                f"No tracks founded for your request {name}"
+            )
+            return await ctx.send(embed=embed, delete_after=5)
+
+        tracks_str_list = []
+        for i, track in enumerate(tracks):
+            duration = self._get_duration(track["duration"])
+            tracks_str_list.append(f"**{i + 1}. {track['name']}** {duration}")
+        description = "\n".join(tracks_str_list)
+        embed = embed_utils.create_music_embed(
+            description=description,
+            footer="Type index of track to add it to queue"
+        )
+        message = await ctx.send(embed=embed)
+
+        def check(m):
+            return m.author == ctx.message.author \
+                   and m.channel == ctx.message.channel \
+                   and m.content.isdigit() \
+                   and int(m.content) <= len(tracks)
+
+        try:
+            msg = await self.client.wait_for("message", check=check, timeout=30)
+        except asyncio.TimeoutError:
+            pass
+        else:
+            track = tracks[int(msg.content) - 1]
+            await self.add_to_queue_command(ctx, "", track=track)
+        finally:
+            await message.delete(delay=5)
 
     # Auto self deaf
     @commands.Cog.listener()
@@ -653,7 +693,7 @@ class Player(commands.Cog):
                 if reaction.emoji == "➡":
                     page = self.queue_messages[ctx.guild.id]["page"]
                     _, pages = self.get_pages(ctx.guild.id, page)
-                    if pages <= 2 or page == pages:
+                    if pages < 2 or page == pages:
                         return
                     embed = self.create_queue_embed(ctx, page + 1)
                     self.queue_messages[ctx.guild.id]["page"] = page + 1

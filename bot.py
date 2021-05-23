@@ -46,13 +46,16 @@ async def on_guild_join(guild):
                     'Прекратить прослушивание: -stop\n'
                     'Заставить бота выйти из канала: -leave\n'
                     'Изменить настройку лупа: -loop\n'
-                    'Перемешать треки: -shuffle',
+                    'Перемешать треки: -shuffle\n\n'
+                    'Чтобы просмотреть эту информацию еще раз, напишите -help',
         color=0x0a7cff
     )
     message.set_footer(text=me.name, icon_url=me.avatar_url)  # delete this too
     await owner.send(embed=message)
 
 if __name__ == '__main__':
+    client.remove_command("help")
+
     for filename in os.listdir("./cogs"):
         if filename.endswith(".py"):
             client.load_extension(f"cogs.{filename[:-3]}")
