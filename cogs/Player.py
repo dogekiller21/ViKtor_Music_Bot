@@ -55,9 +55,11 @@ class Player(commands.Cog):
         return dur
 
     def create_player_embed(self, ctx: commands.Context):
+        length = len(self.tracks[ctx.guild.id]["tracks"])
+        print(length)
         embed = embed_utils.create_music_embed(
             title=f"Player in {ctx.voice_client.channel.name}",
-            description="",
+            description=f"{length} tracks in queue",
             image="https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png"
         )
 
@@ -265,7 +267,7 @@ class Player(commands.Cog):
             return await ctx.message.add_reaction("❌")
 
         if (len(link) > 0) and "vk.com/" not in link[0]:
-            return await self.add_to_queue_command(ctx, *link)
+            return await self.add_to_queue_command(ctx, *link, track=None)
 
         voice = ctx.voice_client
 
