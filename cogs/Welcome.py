@@ -18,7 +18,7 @@ class Welcome(commands.Cog):
 
     @commands.command(name="welcome_channel", pass_context=True)
     @commands.guild_only()
-    @commands.check(check_if_owner)
+    @commands.has_guild_permissions(administrator=True)
     async def welcome_channel_command(self, ctx: commands.Context, channel_id=None):
         if not channel_id:
             channel_id = ctx.channel.id
@@ -41,7 +41,7 @@ class Welcome(commands.Cog):
 
     @commands.command(name="welcome_role", pass_context=True)
     @commands.guild_only()
-    @commands.check(check_if_owner)
+    @commands.has_guild_permissions(administrator=True)
     async def welcome_role_command(self, ctx: commands.Context, role: Optional[discord.Role]):
         if not role:
             role_id = functions.get_guild_smf(ctx.guild.id, "welcome_role_id")
@@ -75,21 +75,21 @@ class Welcome(commands.Cog):
         )
         await ctx.send(embed=embed)
 
+    async def _give_role(self, member: discord.Member, role: discord.Role):
+        if not member.guild.me.guild_permissions.manage_roles:
+            return
+        user_role = discord.utils.get(member.guild.roles, id=role)
+        if user_role is None:
+            return
+        await member.add_roles(user_role)
+
     @commands.Cog.listener()
     async def on_member_join(self, member):
         channel = functions.get_guild_smf(member.guild.id, "welcome_channel_id")
         role = functions.get_guild_smf(member.guild.id, "welcome_role_id")
         msg_channel = self.client.get_channel(channel)
         if role:
-            user_role = discord.utils.get(member.guild.roles, id=role)
-            try:
-                await member.add_roles(user_role)
-            except Exception as err:
-                embed = embed_utils.create_error_embed(
-                    message=f'Невозможно выдать роль {user_role.mention} участнику {member.mention}'
-                )
-                await msg_channel.send(embed=embed)
-                print(err)
+            await self._give_role(member, role)
         message = discord.Embed(
             title='Новый пользователь!',
             description=f'Добро пожаловать, кожаный ублюдок {member.mention}',

@@ -245,16 +245,18 @@ class Player(commands.Cog):
     async def player_command(self, ctx: commands.Context):
         voice = ctx.voice_client
         if ctx.guild.id not in self.tracks:
-            return await self.nothing_is_playing_error(ctx)
-        if voice is not None:
-            embed = self.create_player_embed(ctx)
-            player_message = await ctx.send(embed=embed)
-            if ctx.guild.id in self.player_messages:
-                await self.player_messages[ctx.guild.id].delete(delay=2)
-            self.player_messages[ctx.guild.id] = player_message
-            emoji_list = ["🔀", "⏪", "▶", "⏩", "⏹", "🔁", "📑"]
-            for emoji in emoji_list:
-                await player_message.add_reaction(emoji)
+            await self.nothing_is_playing_error(ctx)
+            return
+        if voice is None:
+            return
+        embed = self.create_player_embed(ctx)
+        player_message = await ctx.send(embed=embed)
+        if ctx.guild.id in self.player_messages:
+            await self.player_messages[ctx.guild.id].delete(delay=2)
+        self.player_messages[ctx.guild.id] = player_message
+        emoji_list = ["🔀", "⏪", "▶", "⏩", "⏹", "🔁", "📑"]
+        for emoji in emoji_list:
+            await player_message.add_reaction(emoji)
 
     @commands.command(name="play", aliases=["p"])
     @commands.guild_only()
@@ -268,7 +270,8 @@ class Player(commands.Cog):
             return await ctx.message.add_reaction("❌")
 
         if (len(link) > 0) and "vk.com/" not in link[0]:
-            return await self.add_to_queue_command(ctx, *link, track=None)
+            await self.add_to_queue_command(ctx, *link, track=None)
+            return
 
         voice = ctx.voice_client
 
@@ -277,13 +280,15 @@ class Player(commands.Cog):
                 message="Добавьте ссылку или имя трека к команде"
             )
             await ctx.message.add_reaction("❌")
-            return await ctx.send(embed=embed, delete_after=5)
+            await ctx.send(embed=embed, delete_after=5)
+            return
 
         if not voice or not voice.is_connected():
             await self._join(ctx)
             voice = ctx.voice_client
         elif (len(link) == 0) and not (voice.is_playing() or voice.is_paused()):
-            return await self.nothing_is_playing_error(ctx)
+            await self.nothing_is_playing_error(ctx)
+            return
 
         elif (voice.is_playing() or voice.is_paused()) and (len(link) != 0):
             del self.tracks[ctx.guild.id]
@@ -295,7 +300,8 @@ class Player(commands.Cog):
         elif voice.is_paused():
             voice.resume()
             await self.player_message_update(ctx)
-            return await self.queue_message_update(ctx)
+            await self.queue_message_update(ctx)
+            return
 
         elif voice.is_playing():
             if len(link) == 0:

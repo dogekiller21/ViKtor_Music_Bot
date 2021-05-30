@@ -1,3 +1,5 @@
+import json
+
 import discord
 
 import functions
@@ -6,10 +8,21 @@ from discord.ext import commands
 
 import os
 
-prefix = '-'
+
+DEFAULT_PREFIX = "-"
+
+
+def get_prefix(bot: discord.Client, message: discord.Message):
+    with open("prefixes.json", "r") as file:
+        try:
+            return json.load(file)[str(message.guild.id)]
+        except KeyError:
+            return DEFAULT_PREFIX
+
+
 intents = discord.Intents.all()
 intents.members = True
-client = commands.Bot(command_prefix=prefix, intents=intents)
+client = commands.Bot(command_prefix=get_prefix, intents=intents)
 
 
 @client.event
@@ -32,7 +45,8 @@ async def on_guild_join(guild):
                     'Чтобы настроить канал для приветствий: -welcome_channel <id> '
                     '(без id будет выбран канал, в котором было отправлено сообщение)\n'
                     'Чтобы настроить роль для новых пользователей: -welcome_role <role> '
-                    '(без упоминания информация о текущих настройках)\n\n'
+                    '(без упоминания информация о текущих настройках)\n'
+                    'Данные команды можно использовать только с правами администратора\n\n'
                     'Чтобы бот имел возможность выдавать роли, ему нужно выдать '
                     'роль с правом выдачи других ролей и переместить ее выше остальных\n'
                     'Рекомендуется выдать боту роль с правами администратора\n\n'
@@ -47,10 +61,12 @@ async def on_guild_join(guild):
                     'Заставить бота выйти из канала: -leave\n'
                     'Изменить настройку лупа: -loop\n'
                     'Перемешать треки: -shuffle\n\n'
+                    'Изменить префикс: -prefix <префикс>\n'
+                    'Сбросить на стандартный: {префикс}prefix'
                     'Чтобы просмотреть эту информацию еще раз, напишите -help',
         color=0x0a7cff
     )
-    message.set_footer(text=me.name, icon_url=me.avatar_url)  # delete this too
+    message.set_footer(text=f"{me.name}#{me.discriminator}", icon_url=me.avatar_url)  # delete this too
     await owner.send(embed=message)
 
 if __name__ == '__main__':
