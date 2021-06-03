@@ -13,6 +13,9 @@ def check_if_owner(ctx: commands.Context):
 
 
 class Welcome(commands.Cog):
+    """Приветствие и выдача ролей новым пользователям. Требуются права администратора для работы!
+    """
+
     def __init__(self, client):
         self.client = client
 
@@ -20,6 +23,7 @@ class Welcome(commands.Cog):
     @commands.guild_only()
     @commands.has_guild_permissions(administrator=True)
     async def welcome_channel_command(self, ctx: commands.Context, channel_id=None):
+        """Изменение канала для приветствия. После команды достаточно упомянуть канал или написать его id"""
         if not channel_id:
             channel_id = ctx.channel.id
             msg_end = f'этом канале'
@@ -43,6 +47,9 @@ class Welcome(commands.Cog):
     @commands.guild_only()
     @commands.has_guild_permissions(administrator=True)
     async def welcome_role_command(self, ctx: commands.Context, role: Optional[discord.Role]):
+        """Изменение роли для новых пользователей. После команды упомяните роль, которую хотите задать.
+        Если команда будет написана без роли, бот подскажет какая роль установлена сейчас"""
+
         if not role:
             role_id = functions.get_guild_smf(ctx.guild.id, "welcome_role_id")
             role = discord.utils.get(ctx.guild.roles, id=role_id)
@@ -57,23 +64,6 @@ class Welcome(commands.Cog):
             )
             await ctx.send(embed=embed)
             functions.write_welcome_role(ctx.guild.id, role.id)
-
-    # Converter for user's roles
-    # Return list of discord.Role objects
-    class MemberRoles(commands.MemberConverter):
-        async def convert(self, ctx: commands.Context, argument):
-            member = await super().convert(ctx, argument)
-            return member, member.roles[1:]
-
-    @commands.command(name="roles", pass_context=True)
-    @commands.guild_only()
-    async def roles_command(self, ctx: commands.Context, *, member: MemberRoles()):
-        description = "\n\n".join([r.mention for r in reversed(member[1])])
-        embed = discord.Embed(
-            title=f"Роли {member[0].name}",
-            description=description
-        )
-        await ctx.send(embed=embed)
 
     async def _give_role(self, member: discord.Member, role: discord.Role):
         if not member.guild.me.guild_permissions.manage_roles:

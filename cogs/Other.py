@@ -3,46 +3,22 @@ from typing import Optional
 
 import discord
 from discord.ext import commands
+from discord.ext.commands import CommandError
 
 from utils import embed_utils
 
-from bot import DEFAULT_PREFIX
+from bot import DEFAULT_PREFIX, get_prefix
 
 
 class Other(commands.Cog):
+    """Дополнительные команды
+    """
+
     def __init__(self, client):
         self.client = client
-
-    @commands.command(name="help", pass_context=True)
-    async def help_command(self, ctx: commands.Context):
-        embed = embed_utils.create_info_embed(
-            title="Мои команды",
-            description='Бот(я) умеет:\n'
-                        '1) Приветствовать новых пользователей и выдавать им роли.\n'
-                        'Чтобы настроить канал для приветствий: -welcome_channel <id> '
-                        '(без id будет выбран канал, в котором было отправлено сообщение)\n'
-                        'Чтобы настроить роль для новых пользователей: -welcome_role <role> '
-                        '(без упоминания информация о текущих настройках)\n'
-                        'Данные команды можно использовать только с правами администратора\n\n'
-                        'Чтобы бот имел возможность выдавать роли, ему нужно выдать '
-                        'роль с правом выдачи других ролей и переместить ее выше остальных\n'
-                        'Рекомендуется выдать боту роль с правами администратора\n\n'
-                        '2) Проигрывать музыку из ВК\n'
-                        'Для проигрывания плейлиста или трека: -play <link|name>\n'
-                        'Добавить одиночный трек в очередь: -add <name>\n'
-                        'Пропустить трек: -skip <кол-во> (по стандарту 1)\n'
-                        'Предыдущий трек: -prev <кол-во> (по стандарту 1)\n'
-                        'Приостановить: -pause\n'
-                        'Запустить вновь: -play\n'
-                        'Прекратить прослушивание: -stop\n'
-                        'Заставить бота выйти из канала: -leave\n'
-                        'Изменить настройку лупа: -loop\n'
-                        'Перемешать треки: -shuffle\n\n'
-                        'Изменить префикс: -prefix <префикс>\n'
-                        'Сбросить на стандартный: {префикс}prefix'
-        )
-
-        await ctx.send(embed=embed)
+        self.normal_color = 0x5CC347
+        self.error_color = 0xC27746
+        self.bug_color = 0x46C0C2
 
     def _edit_prefix(self, guild_id, prefix):
         with open("prefixes.json", "r") as file:
@@ -62,6 +38,8 @@ class Other(commands.Cog):
     @commands.guild_only()
     @commands.has_guild_permissions(administrator=True)
     async def prefix_command(self, ctx: commands.Context, prefix: Optional[str] = None):
+        """Изменение префикса для гильдии. Если префикс будет оканчиваться на обычную букву или цифру,
+        к нему будет добавлена . (например, test -> test.)"""
         if prefix is not None and not prefix.endswith((".", "!", "@", "_", "*", "$", "%", "#", "^", "&", "/")):
             prefix += "."
         self._edit_prefix(ctx.guild.id, prefix)
@@ -69,9 +47,85 @@ class Other(commands.Cog):
             prefix = DEFAULT_PREFIX
         embed = embed_utils.create_info_embed(
             title="Префикс изменен",
-            description=f"Теперь команды в вашей гильдии должны начинаться с **{prefix}**\n"
-                        f"Пример: **{prefix}play**"
+            description=f"Теперь команды в вашей гильдии должны начинаться с `{prefix}`\n"
+                        f"Пример: `{prefix}help`"
         )
+        await ctx.send(embed=embed)
+
+    @commands.command(name="help")
+    async def help_command(self, ctx, *data):
+        """Вызывает эту команду"""
+        prefix = get_prefix(self.client, ctx.message)
+
+        if not data:
+            embed = discord.Embed(
+                title='Команды и модули',
+                description=f'Используйте `{prefix}help <модуль>`, чтобы получить подробную информацию\n',
+                color=self.normal_color
+            )
+
+            cogs_desc = ''
+            for cog in self.client.cogs:
+                passed = 0
+                _cog = self.client.get_cog(cog)
+                for command in _cog.get_commands():
+                    try:
+                        await command.can_run(ctx)
+                        passed += 1
+                    except CommandError:
+                        pass
+                if passed != 0:
+                    cogs_desc += f'`{cog}` {self.client.cogs[cog].__doc__}\n'
+
+            embed.add_field(name='Модули', value=cogs_desc, inline=False)
+
+            commands_desc = ''
+            for command in self.client.walk_commands():
+                if not command.cog_name and not command.hidden:
+                    commands_desc += f'{command.name} - {command.help}\n'
+
+            if commands_desc:
+                embed.add_field(name='Не относящиеся к модулю', value=commands_desc, inline=False)
+
+        elif len(data) == 1:
+
+            for cog in self.client.cogs:
+                if cog.lower() == data[0].lower():
+
+                    embed = discord.Embed(title=f'Команды в модуле {cog}',
+                                          color=self.normal_color)
+
+                    for command in self.client.get_cog(cog).get_commands():
+                        if not command.hidden:
+                            try:
+                                await command.can_run(ctx)
+                                embed.add_field(name=f"`{prefix}{command.name}`", value=command.help, inline=False)
+                            except CommandError:
+                                pass
+                    if not embed.fields:
+                        embed.add_field(name=":(", value="Нет команд, которые вы можете использовать")
+
+                    break
+
+            else:
+                embed = discord.Embed(title="Что это?",
+                                      description=f"Никогда не слышал о модуле `{data[0]}`",
+                                      color=self.error_color)
+            embed.set_footer(text=ctx.author.display_name, icon_url=ctx.author.avatar_url)
+
+        elif len(data) > 1:
+            embed = discord.Embed(title="Многовато",
+                                  description="Пожалуйста, вводите только один модуль за раз",
+                                  color=self.error_color)
+
+        else:
+            embed = discord.Embed(title="",
+                                  description="Кажется, вы обнаружили баг.\n"
+                                              "Пожалуйста, сообщите об этом мне dogekiller21#6067",
+                                  color=self.bug_color)
+
+
+
         await ctx.send(embed=embed)
 
 
