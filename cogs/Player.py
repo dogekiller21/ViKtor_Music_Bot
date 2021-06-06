@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 from random import shuffle
 from typing import Optional
 
@@ -10,7 +11,7 @@ from discord.ext import commands
 import functions
 import vk_parsing
 from utils import embed_utils
-from utils.custom_exceptions import NoTracksFound, EmptyQueue
+from utils.custom_exceptions import NoTracksFound, EmptyQueue, NoVoiceClient, IncorrectVoiceChannel
 
 
 class Player(commands.Cog):
@@ -62,7 +63,6 @@ class Player(commands.Cog):
         embed = embed_utils.create_music_embed(
             title=f"Плеер в канале {ctx.voice_client.channel.name}",
             description=f"`Треков в очереди: {length}`",
-            image="https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png",
             footer=self._get_loop_str(ctx.guild.id)
         )
 
@@ -91,6 +91,7 @@ class Player(commands.Cog):
                             value=f"\n**{next_index + 1}. {tracks[next_index]['name']}** {dur}",
                             inline=False)
 
+        embed.set_thumbnail(url=tracks[now_playing]["thumb"])
         return embed
 
     # Loop settings in string format for embed footer
@@ -279,11 +280,8 @@ class Player(commands.Cog):
     @commands.guild_only()
     async def player_command(self, ctx: commands.Context):
         """Вызов плеера для текущей гильдии"""
-        voice = ctx.voice_client
         if ctx.guild.id not in self.tracks:
             await self.nothing_is_playing_error(ctx)
-            return
-        if voice is None:
             return
         embed = self.create_player_embed(ctx)
         player_message = await ctx.send(embed=embed)
@@ -299,13 +297,6 @@ class Player(commands.Cog):
     async def play_command(self, ctx: commands.Context, *link: Optional[str]):
         """Команда для проигрывания треков и плейлистов
         Если команда написана без аргументов после, бот попытается востановить проигрывание"""
-
-        if not ctx.author.voice:
-            embed = embed_utils.create_error_embed("Вы должны быть подключены к голосовому каналу")
-
-            await ctx.send(embed=embed, delete_after=5)
-
-            return await ctx.message.add_reaction("❌")
 
         if (len(link) > 0) and "vk.com/" not in link[0]:
             await self.add_to_queue_command(ctx, *link, track=None)
@@ -361,7 +352,7 @@ class Player(commands.Cog):
         """Приостановить проигрывание"""
         voice = ctx.voice_client
         if not voice.is_playing():
-            return await self.nothing_is_playing_error(ctx)
+            return
         voice.pause()
         await self.player_message_update(ctx)
         await self.queue_message_update(ctx)
@@ -372,8 +363,8 @@ class Player(commands.Cog):
         """Полностью останавливает проигрывание треков в гильдии, очищает очередь.
         Если бот не будет проигрывать ничего в течении 2х минут, он обидится и уйдет"""
         voice = ctx.voice_client
-        if voice is None or not (voice.is_playing() or voice.is_paused()):
-            await self.nothing_is_playing_error(ctx)
+        if not (voice.is_playing() or voice.is_paused()):
+            raise NoVoiceClient
         if voice.is_connected():
             del self.tracks[ctx.guild.id]
             await self.delete_messages(ctx.guild.id)
@@ -414,7 +405,7 @@ class Player(commands.Cog):
     async def shuffle_command(self, ctx: commands.Context):
         """Перемешать треки в очереди"""
         voice = ctx.voice_client
-        if voice is not None and (voice.is_playing() or voice.is_paused()):
+        if voice.is_playing() or voice.is_paused():
             tracks = self.tracks[ctx.guild.id]["tracks"]
             if len(tracks) == 1:
                 return
@@ -432,12 +423,11 @@ class Player(commands.Cog):
         """Пропустить один или несколько треков.
         Чтобы пропустить несколько треков необходимо добавить число к команде"""
         voice = ctx.voice_client
-        if voice is None:
-            return await self.nothing_is_playing_error(ctx)
-        try:
-            tracks_info = self.tracks[ctx.guild.id]
-        except KeyError:
-            return await self.nothing_is_playing_error(ctx)
+
+        if ctx.guild.id not in self.tracks:
+            return
+
+        tracks_info = self.tracks[ctx.guild.id]
 
         tracks, index = tracks_info["tracks"], tracks_info["index"]
         if (new_index := index + count) > len(tracks) - 1:
@@ -457,23 +447,20 @@ class Player(commands.Cog):
         """Вернуться на один или несколько треков назад.
         Про количество смотрите в команде **skip**"""
         voice = ctx.voice_client
-        if voice is None:
-            await self.nothing_is_playing_error(ctx)
 
-        else:
-            if ctx.guild.id not in self.tracks:
-                await self.nothing_is_playing_error(ctx)
+        if ctx.guild.id not in self.tracks:
+            return
 
-            tracks, index = self.tracks[ctx.guild.id]["tracks"], self.tracks[ctx.guild.id]["index"]
-            if (new_index := index - count) < 0:
-                new_index = await self.queue_index_overflow(
-                    ctx=ctx,
-                    voice_client=voice,
-                    default=len(tracks) - 1
-                )
-            if new_index is not None:
-                self.tracks[ctx.guild.id]["index"] = new_index - 1
-                await self._stop(voice, force=False)
+        tracks, index = self.tracks[ctx.guild.id]["tracks"], self.tracks[ctx.guild.id]["index"]
+        if (new_index := index - count) < 0:
+            new_index = await self.queue_index_overflow(
+                ctx=ctx,
+                voice_client=voice,
+                default=len(tracks) - 1
+            )
+        if new_index is not None:
+            self.tracks[ctx.guild.id]["index"] = new_index - 1
+            await self._stop(voice, force=False)
 
     @commands.command(name="add", aliases=["add_to_queue"])
     @commands.guild_only()
@@ -481,14 +468,6 @@ class Player(commands.Cog):
         """Добавить первый трек из поиска ВКонтакте в плейлист.
         Работает точно также, как и команда **play** с переданным туда именем трека"""
         await ctx.message.add_reaction("🎧")
-
-        if not ctx.author.voice:
-            embed = embed_utils.create_error_embed(
-                message="Вы должны быть подключены к голосовому каналу"
-            )
-            await ctx.send(embed=embed, delete_after=5)
-
-            return await ctx.message.add_reaction("❌")
 
         voice = ctx.voice_client
         if track is None:
@@ -518,7 +497,7 @@ class Player(commands.Cog):
         else:
             self.tracks[ctx.guild.id]["tracks"].append(track)
 
-        if not voice or not voice.is_connected() or not (voice.is_paused() or voice.is_playing()):
+        if not voice or not (voice.is_paused() or voice.is_playing()):
             await self._join(ctx=ctx)
             voice = ctx.voice_client
             await self.player_command(ctx)
@@ -543,8 +522,6 @@ class Player(commands.Cog):
         """Удалить трек под номером, который вы скажете боту, из очереди"""
         await ctx.message.add_reaction("💔")
         voice = ctx.voice_client
-        if voice is None:
-            return
         tracks, now_playing = self.tracks[ctx.guild.id]["tracks"], self.tracks[ctx.guild.id]["index"]
 
         if (index <= 0) or (index > len(tracks)):
@@ -577,8 +554,6 @@ class Player(commands.Cog):
     async def jump_command(self, ctx: commands.Context, index: int):
         """Перепрыгнуть на определенный трек под номером, который вы скажете боту в команде"""
         voice = ctx.voice_client
-        if not voice or not voice.is_connected():
-            return
 
         tracks_info = self.tracks[ctx.guild.id]
         tracks = tracks_info["tracks"]
@@ -601,13 +576,14 @@ class Player(commands.Cog):
         if ctx.message.author.bot:
             await self.player_message_update(ctx)
             return
+        cliche = "Зацикливание очереди {} для вашей гильдии"
         if is_looped:
             embed = embed_utils.create_info_embed(
-                description="Зацикливание очереди отключено для вашей гильдии"
+                description=cliche.format("отключено")
             )
         else:
             embed = embed_utils.create_info_embed(
-                description="Зацикливание очереди включено для вашей гильдии"
+                description=cliche.format("включено")
             )
         await ctx.send(embed=embed, delete_after=5)
 
@@ -618,7 +594,7 @@ class Player(commands.Cog):
         await ctx.message.add_reaction("🚪")
 
         voice = ctx.voice_client
-        if voice and voice.is_connected():
+        if voice.is_connected():
             try:
                 del self.tracks[ctx.guild.id]
             except KeyError:
@@ -627,12 +603,6 @@ class Player(commands.Cog):
 
             await voice.disconnect()
             await ctx.message.add_reaction("✔")
-        else:
-            embed = embed_utils.create_error_embed("Вы не подключены к голосовому каналу")
-
-            await ctx.send(embed=embed, delete_after=5)
-
-            await ctx.message.add_reaction("❌")
 
     @commands.command(name="search", aliases=["s"])
     @commands.guild_only()
@@ -693,6 +663,45 @@ class Player(commands.Cog):
             pass
         await self.delete_messages(guild_id)
         await voice.disconnect()
+
+    @player_command.before_invoke
+    @pause_command.before_invoke
+    @queue_command.before_invoke
+    @jump_command.before_invoke
+    @leave_command.before_invoke
+    async def _check_voice(self, ctx: commands.Context):
+        voice = ctx.voice_client
+        if voice is None:
+            raise NoVoiceClient
+
+    @play_command.before_invoke
+    @add_to_queue_command.before_invoke
+    @search_command.before_invoke
+    async def _check_member_voice(self, ctx: commands.Context):
+        if ctx.voice_client is not None:
+            return
+        if not ctx.author.voice:
+            raise IncorrectVoiceChannel
+
+    async def cog_command_error(self, ctx: commands.Context, error):
+        voice_client_needed = ["player", "pause", "queue", "jump", "leave"]
+        member_voice_needed = ["play", "add", "search"]
+        if ctx.command.name in voice_client_needed:
+            if isinstance(error, NoVoiceClient):
+                embed = embed_utils.create_error_embed(
+                    message="Ничего не играет :(\n"
+                            "Используйте команду `play` или `search`"
+                )
+                await ctx.send(embed=embed)
+                return
+        if ctx.command.name in member_voice_needed:
+            if isinstance(error, IncorrectVoiceChannel):
+                embed = embed_utils.create_error_embed(
+                    message="Вы должны быть подключены к голосовому каналу"
+                )
+                await ctx.send(embed=embed)
+                return
+        traceback.print_exc()
 
     # Auto self deaf
     @commands.Cog.listener()

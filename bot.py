@@ -8,7 +8,6 @@ from discord.ext import commands
 
 import os
 
-
 DEFAULT_PREFIX = "-"
 
 

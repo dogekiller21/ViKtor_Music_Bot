@@ -1,3 +1,4 @@
+import asyncio
 from typing import Union
 
 from cfg import VK_ME_TOKEN
@@ -40,6 +41,12 @@ def optimize_link(link: str) -> dict:
         }
 
 
+def get_thumb(track_info: dict):
+    if "album" not in track_info:
+        return "https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png"
+    return track_info["album"]["thumb"]["photo_270"]
+
+
 async def get_audio(url: str) -> list:
     # https://vk.com/music/album/-2000775086_8775086_3020c01f90d96ecf46
     # https://vk.com/audios283345310?z=audio_playlist-2000775086_8775086%2F3020c01f90d96ecf46
@@ -51,11 +58,13 @@ async def get_audio(url: str) -> list:
     tracks = []
     response = await api.get_context().api_request(method_name="audio.get", params=params)
     for item in response["response"]["items"]:
+        image = get_thumb(item)
         name = f"{item['title']} - {item['artist']}"
         tracks.append({
             "url": item["url"],
             "name": name,
-            "duration": item["duration"]
+            "duration": item["duration"],
+            "thumb": image
         }
         )
     return tracks
@@ -71,17 +80,21 @@ async def get_single_audio(name: str, count: int = 1) -> Union[dict, list]:
     if count == 1:
         item = items[0]
         name = f"{item['title']} - {item['artist']}"
+        image = get_thumb(item)
         return {
             "url": item["url"],
             "name": name,
-            "duration": item["duration"]
+            "duration": item["duration"],
+            "thumb": image
         }
     items_list = []
     for item in items[:count]:
         name = f"{item['title']} - {item['artist']}"
+        image = get_thumb(item)
         items_list.append({
             "url": item["url"],
             "name": name,
-            "duration": item["duration"]
+            "duration": item["duration"],
+            "thumb": image
         })
     return items_list

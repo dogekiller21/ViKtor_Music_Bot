@@ -124,8 +124,6 @@ class Other(commands.Cog):
                                               "Пожалуйста, сообщите об этом мне dogekiller21#6067",
                                   color=self.bug_color)
 
-
-
         await ctx.send(embed=embed)
 
 

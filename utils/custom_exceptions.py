@@ -1,3 +1,4 @@
+from discord.ext.commands import CommandError
 
 
 class NoTracksFound(Exception):
@@ -5,4 +6,12 @@ class NoTracksFound(Exception):
 
 
 class EmptyQueue(Exception):
+    pass
+
+
+class NoVoiceClient(CommandError):
+    pass
+
+
+class IncorrectVoiceChannel(CommandError):
     pass
