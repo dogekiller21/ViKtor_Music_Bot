@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import traceback
 from random import shuffle
 from typing import Optional
@@ -10,12 +11,12 @@ from discord.ext import commands
 
 import functions
 import vk_parsing
-from utils import embed_utils
-from utils.custom_exceptions import NoTracksFound, EmptyQueue, NoVoiceClient, IncorrectVoiceChannel
+from utils import embed_utils, playlists_utils
+from utils.custom_exceptions import NoTracksFound, EmptyQueue, NoVoiceClient, IncorrectVoiceChannel, ToManyPlaylists
 
 
 class Player(commands.Cog):
-    """Команды, связанные с проигрывание музыки
+    """Команды, связанные с проигрыванием музыки
     """
 
     def __init__(self, client):
@@ -58,17 +59,31 @@ class Player(commands.Cog):
         dur += f"{minutes:02d}:{seconds:02d}"
         return dur
 
+    def get_requester(self, track: dict):
+        if "requester" not in track:
+            return
+        user = self.client.get_user(track["requester"])
+        if user is not None:
+            return {"text": user.display_name,
+                    "icon_url": user.avatar_url}
+        return {"text": "Неизвестный пользователь",
+                "icon_url": "https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png"}
+
     def create_player_embed(self, ctx: commands.Context):
         length = len(self.tracks[ctx.guild.id]["tracks"])
-        embed = embed_utils.create_music_embed(
-            title=f"Плеер в канале {ctx.voice_client.channel.name}",
-            description=f"`Треков в очереди: {length}`",
-            footer=self._get_loop_str(ctx.guild.id)
-        )
 
         now_playing = self.tracks[ctx.guild.id]["index"]
         tracks = self.tracks[ctx.guild.id]["tracks"]
         prev_index, next_index = now_playing - 1, now_playing + 1
+
+        embed = embed_utils.create_music_embed(
+            title=f"Плеер в канале {ctx.voice_client.channel.name}",
+            description=f"`Треков в очереди: {length}`\n"
+                        f"{self._get_loop_str_min(ctx.guild.id)}"
+        )
+        requester = self.get_requester(tracks[now_playing])
+        if requester is not None:
+            embed.set_footer(**requester)
         if prev_index >= 0:
             dur = self._get_duration(tracks[prev_index]["duration"])
             embed.add_field(name="Предыдущий трек",
@@ -97,9 +112,17 @@ class Player(commands.Cog):
     # Loop settings in string format for embed footer
     def _get_loop_str(self, guild_id):
         loop_settings = functions.get_guild_smf(guild_id, "loop_queue")
+        cliche = "Зацикливание очереди **{}**"
         if loop_settings:
-            return "Зацикливание очереди включено"
-        return "Зацикливание очереди выключено"
+            return cliche.format("включено")
+        return cliche.format("выключено")
+
+    def _get_loop_str_min(self, guild_id):
+        loop_settings = functions.get_guild_smf(guild_id, "loop_queue")
+        cliche = "Зацикливание **{}**"
+        if loop_settings:
+            return cliche.format("вкл")
+        return cliche.format("выкл")
 
     # Queue embed
     def create_queue_embed(self, ctx: commands.Context, page: Optional[int] = None):
@@ -292,6 +315,67 @@ class Player(commands.Cog):
         for emoji in emoji_list:
             await player_message.add_reaction(emoji)
 
+    def _get_playlists_message(self, ctx):
+        playlists = playlists_utils.get_single_guild_playlist(ctx.guild.id)
+        desc = f"`Всего плейлистов: {len(playlists)}`"
+        embed = embed_utils.create_music_embed(
+            title=f"Плейлисты в вашей гильдии {ctx.guild.name}",
+            description=desc
+        )
+        for key in playlists:
+            playlist = playlists[key]
+            date = datetime.date.fromordinal(playlist["date"])
+            date = date.strftime("%d-%m-%Y")
+            embed.add_field(
+                name=f"{key}",
+                value=f"`Треков: {len(playlist['tracks'])}`\n"
+                      f"`Дата создания: {date}`",
+                inline=False
+            )
+        embed.set_footer(text="Используйте эту команду с названием плейлиста для проигрывания")
+        return embed
+
+    @commands.command(name="playlist")
+    @commands.guild_only()
+    async def playlist_command(self, ctx: commands.Context, *name):
+        playlists = playlists_utils.get_single_guild_playlist(ctx.guild.id)
+        if playlists is None:
+            embed = embed_utils.create_error_embed(
+                message="В вашей гильдии еще нет плейлистов\n"
+                        "Используйте команду `save` для сохранения очереди в плейлист"
+            )
+            await ctx.send(embed=embed)
+            return
+        if len(name) == 0:
+            embed = self._get_playlists_message(ctx)
+            await ctx.send(embed=embed)
+            return
+        name = " ".join(name)
+        if name not in playlists:
+            embed = embed_utils.create_error_embed(
+                message=f"Не найдено плейлиста с названием {name}"
+            )
+            await ctx.send(embed=embed)
+            return
+
+        voice = ctx.voice_client
+        if voice is None:
+            await self._join(ctx)
+            voice = ctx.voice_client
+        if voice.is_playing() or voice.is_paused():
+            del self.tracks[ctx.guild.id]
+
+            await self.delete_messages(ctx.guild.id)
+
+            await self._stop(voice, force=False)
+            await asyncio.sleep(.5)  # Ебучий случай начинает скипать треки, удалять сообщения просто потому что
+        tracks = playlists[name]["tracks"]
+        self.tracks[ctx.guild.id] = {"tracks": tracks, "index": 0}
+
+        voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]),
+                   after=lambda x: self.play_next(x, voice, ctx))
+        await self.player_command(ctx)
+
     @commands.command(name="play", aliases=["p"])
     @commands.guild_only()
     async def play_command(self, ctx: commands.Context, *link: Optional[str]):
@@ -338,13 +422,13 @@ class Player(commands.Cog):
             await self._stop(voice, force=False)
 
         link = link[0]
-        tracks = await vk_parsing.get_audio(link)
+        tracks = await vk_parsing.get_audio(link, requester=ctx.author.id)
         self.tracks[ctx.guild.id] = {"tracks": tracks, "index": 0}
-
-        await self.player_command(ctx)
 
         voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]),
                    after=lambda x: self.play_next(x, voice, ctx))
+
+        await self.player_command(ctx)
 
     @commands.command(name="pause")
     @commands.guild_only()
@@ -473,7 +557,7 @@ class Player(commands.Cog):
         if track is None:
             name = " ".join(name)
             try:
-                track = await vk_parsing.get_single_audio(name)
+                track = await vk_parsing.get_single_audio(requester=ctx.author.id, name=name)
 
             except NoTracksFound:
                 embed = embed_utils.create_error_embed(
@@ -500,10 +584,11 @@ class Player(commands.Cog):
         if not voice or not (voice.is_paused() or voice.is_playing()):
             await self._join(ctx=ctx)
             voice = ctx.voice_client
-            await self.player_command(ctx)
 
-            return voice.play(discord.FFmpegPCMAudio(source=track["url"]),
-                              after=lambda x: self.play_next(x, voice, ctx))
+            voice.play(discord.FFmpegPCMAudio(source=track["url"]),
+                       after=lambda x: self.play_next(x, voice, ctx))
+            await self.player_command(ctx)
+            return
 
         embed = embed_utils.create_music_embed(
             title="Трек добавлен в очередь",
@@ -607,11 +692,11 @@ class Player(commands.Cog):
     @commands.command(name="search", aliases=["s"])
     @commands.guild_only()
     async def search_command(self, ctx: commands.Context, *name):
-        """Найти трек. Бот любезно предложит выбрать вам максимум из 10ти найденных треков один для проигрывания"""
+        """Найти трек. Бот любезно предложит выбрать вам из 10ти(максимум) найденных треков один для проигрывания"""
         tracks = []
         name = " ".join(name)
         try:
-            tracks = await vk_parsing.get_single_audio(name, 10)
+            tracks = await vk_parsing.get_single_audio(requester=ctx.author.id, name=name, count=10)
         except NoTracksFound:
             embed = embed_utils.create_error_embed(
                 f"Не найдено треков по вашему запросу: **{name}**"
@@ -653,6 +738,32 @@ class Player(commands.Cog):
         finally:
             await message.delete(delay=5)
 
+    @commands.command(name="save", pass_context=True)
+    @commands.guild_only()
+    async def save_playlist_command(self, ctx: commands.Context):
+        """Сохранить текущий плейлист"""
+        if ctx.guild.id not in self.tracks:
+            embed = embed_utils.create_error_embed(
+                message="Нет треков в очереди"
+            )
+            await ctx.send(embed=embed)
+            return
+        playlist = self.tracks[ctx.guild.id]["tracks"]
+
+        try:
+            playlist_name = playlists_utils.save_new_playlist(ctx.guild.id, playlist)
+            embed = embed_utils.create_music_embed(
+                title="Плейлист сохранен",
+                description=f"Название: `{playlist_name}`"
+            )
+            await ctx.send(embed=embed)
+        except ToManyPlaylists:
+            embed = embed_utils.create_error_embed(
+                message="В вашей гильдии сохранено слишком много плейлистов\n"
+                        "Максимальное кол-во: `10`"
+            )
+            await ctx.send(embed=embed)
+
     async def _leaving(self, voice: discord.VoiceClient, guild_id):
         """
         Clear info and leave from voice channel
@@ -677,6 +788,7 @@ class Player(commands.Cog):
     @play_command.before_invoke
     @add_to_queue_command.before_invoke
     @search_command.before_invoke
+    @playlist_command.before_invoke
     async def _check_member_voice(self, ctx: commands.Context):
         if ctx.voice_client is not None:
             return
@@ -685,7 +797,7 @@ class Player(commands.Cog):
 
     async def cog_command_error(self, ctx: commands.Context, error):
         voice_client_needed = ["player", "pause", "queue", "jump", "leave"]
-        member_voice_needed = ["play", "add", "search"]
+        member_voice_needed = ["play", "add", "search", "playlist"]
         if ctx.command.name in voice_client_needed:
             if isinstance(error, NoVoiceClient):
                 embed = embed_utils.create_error_embed(

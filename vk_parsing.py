@@ -9,7 +9,6 @@ from vkwave.client import AIOHTTPClient
 from utils.custom_exceptions import NoTracksFound
 
 client = AIOHTTPClient()
-
 api = API(clients=client, tokens=VK_ME_TOKEN, api_version="5.90")
 
 
@@ -42,12 +41,12 @@ def optimize_link(link: str) -> dict:
 
 
 def get_thumb(track_info: dict):
-    if "album" not in track_info:
+    if "album" not in track_info or "thumb" not in track_info["album"]:
         return "https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png"
     return track_info["album"]["thumb"]["photo_270"]
 
 
-async def get_audio(url: str) -> list:
+async def get_audio(url: str, requester) -> list:
     # https://vk.com/music/album/-2000775086_8775086_3020c01f90d96ecf46
     # https://vk.com/audios283345310?z=audio_playlist-2000775086_8775086%2F3020c01f90d96ecf46
 
@@ -64,13 +63,14 @@ async def get_audio(url: str) -> list:
             "url": item["url"],
             "name": name,
             "duration": item["duration"],
-            "thumb": image
+            "thumb": image,
+            "requester": requester
         }
         )
     return tracks
 
 
-async def get_single_audio(name: str, count: int = 1) -> Union[dict, list]:
+async def get_single_audio(requester, name: str, count: int = 1) -> Union[dict, list]:
     result = await api.get_context().api_request(
         method_name="audio.search", params={"q": name, "count": count}
     )
@@ -85,7 +85,8 @@ async def get_single_audio(name: str, count: int = 1) -> Union[dict, list]:
             "url": item["url"],
             "name": name,
             "duration": item["duration"],
-            "thumb": image
+            "thumb": image,
+            "requester": requester
         }
     items_list = []
     for item in items[:count]:
@@ -95,6 +96,7 @@ async def get_single_audio(name: str, count: int = 1) -> Union[dict, list]:
             "url": item["url"],
             "name": name,
             "duration": item["duration"],
-            "thumb": image
+            "thumb": image,
+            "requester": requester
         })
     return items_list

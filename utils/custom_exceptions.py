@@ -15,3 +15,7 @@ class NoVoiceClient(CommandError):
 
 class IncorrectVoiceChannel(CommandError):
     pass
+
+
+class ToManyPlaylists(Exception):
+    pass
