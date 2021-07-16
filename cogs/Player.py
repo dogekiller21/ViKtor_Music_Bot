@@ -12,7 +12,8 @@ from discord.ext import commands
 import functions
 import vk_parsing
 from utils import embed_utils, playlists_utils
-from utils.custom_exceptions import NoTracksFound, EmptyQueue, NoVoiceClient, IncorrectVoiceChannel, ToManyPlaylists
+from utils.custom_exceptions import NoTracksFound, EmptyQueue, NoVoiceClient, IncorrectVoiceChannel, ToManyPlaylists, \
+    NoGuildPlaylists, PlaylistNotFound
 
 
 class Player(commands.Cog):
@@ -77,7 +78,7 @@ class Player(commands.Cog):
         prev_index, next_index = now_playing - 1, now_playing + 1
 
         embed = embed_utils.create_music_embed(
-            title=f"Плеер в канале {ctx.voice_client.channel.name}",
+            title=f"Плеер в канале \"{ctx.voice_client.channel.name}\"",
             description=f"`Треков в очереди: {length}`\n"
                         f"{self._get_loop_str_min(ctx.guild.id)}"
         )
@@ -238,7 +239,7 @@ class Player(commands.Cog):
         voice.stop()
         if not force:
             return
-        await asyncio.sleep(60 * 2)
+        await asyncio.sleep(120)
         if voice.guild.id not in self.tracks:
             await self._leaving(voice, voice.guild.id)
 
@@ -319,7 +320,8 @@ class Player(commands.Cog):
         playlists = playlists_utils.get_single_guild_playlist(ctx.guild.id)
         desc = f"`Всего плейлистов: {len(playlists)}`"
         embed = embed_utils.create_music_embed(
-            title=f"Плейлисты в вашей гильдии {ctx.guild.name}",
+            # title=f"Плейлисты в вашей гильдии \"{ctx.guild.name}\"",
+            title="Доступные плейлисты",
             description=desc
         )
         for key in playlists:
@@ -446,7 +448,9 @@ class Player(commands.Cog):
     async def stop_command(self, ctx: commands.Context):
         """Полностью останавливает проигрывание треков в гильдии, очищает очередь.
         Если бот не будет проигрывать ничего в течении 2х минут, он обидится и уйдет"""
-        voice = ctx.voice_client
+        if voice := ctx.voice_client is None:
+            return
+
         if not (voice.is_playing() or voice.is_paused()):
             raise NoVoiceClient
         if voice.is_connected():
@@ -738,9 +742,9 @@ class Player(commands.Cog):
         finally:
             await message.delete(delay=5)
 
-    @commands.command(name="save", pass_context=True)
+    @commands.command(name="save")
     @commands.guild_only()
-    async def save_playlist_command(self, ctx: commands.Context):
+    async def save_playlist_command(self, ctx: commands.Context, *name):
         """Сохранить текущий плейлист"""
         if ctx.guild.id not in self.tracks:
             embed = embed_utils.create_error_embed(
@@ -749,9 +753,12 @@ class Player(commands.Cog):
             await ctx.send(embed=embed)
             return
         playlist = self.tracks[ctx.guild.id]["tracks"]
-
+        if len(name) == 0:
+            name = None
+        else:
+            name = " ".join(name).strip()
         try:
-            playlist_name = playlists_utils.save_new_playlist(ctx.guild.id, playlist)
+            playlist_name = playlists_utils.save_new_playlist(ctx.guild.id, playlist, name)
             embed = embed_utils.create_music_embed(
                 title="Плейлист сохранен",
                 description=f"Название: `{playlist_name}`"
@@ -763,6 +770,72 @@ class Player(commands.Cog):
                         "Максимальное кол-во: `10`"
             )
             await ctx.send(embed=embed)
+
+    async def _check_for_playlist(self, _callable, args, after, ctx):
+        playlist_name = args[1]
+        try:
+            _callable(*args)
+        except NoGuildPlaylists:
+            embed = embed_utils.create_error_embed(
+                message="В вашей гильдии еще нет плейлистов\n"
+                        "Используйте команду `save` для сохранения очереди в плейлист"
+            )
+            await ctx.send(embed=embed)
+        except PlaylistNotFound:
+            embed = embed_utils.create_error_embed(
+                message=f"Не найдено плейлиста по запросу: `{playlist_name}`"
+            )
+            await ctx.send(embed=embed)
+        finally:
+            await after()
+
+    @commands.command(name="rename")
+    @commands.guild_only()
+    async def rename_playlist_command(self, ctx: commands.Context, *names):
+        """Переименовать плейлист.
+        Новое и старое название плейлистов должны быть разделены /
+        Пример: **-rename old_playlist_name / new_playlist_name**"""
+        if (len(names) == 0) or "/" not in names:
+            embed = embed_utils.create_error_embed(
+                message="Старое и новое названия плейлиста должны быть разделены символом `/`"
+            )
+            await ctx.send(embed=embed)
+            return
+        old_name, new_name = " ".join(names).split("/")
+        old_name = old_name.strip()
+        new_name = new_name.strip()
+
+        async def after():
+            _embed = embed_utils.create_music_embed(
+                description=f"Название плейлиста `{old_name}` изменено на `{new_name}`"
+            )
+            await ctx.send(embed=_embed)
+        await self._check_for_playlist(playlists_utils.rename_playlist,
+                                       [ctx.guild.id, old_name, new_name],
+                                       after, ctx)
+
+    @commands.command(name="del_playlist")
+    @commands.guild_only()
+    async def delete_playlist_command(self, ctx: commands.Context, *playlist_name):
+        if len(playlist_name) == 0:
+            embed = embed_utils.create_error_embed(
+                message="Добавьте название плейлиста к этой команде для удаления"
+            )
+            await ctx.send(embed=embed)
+            return
+        playlist_name = " ".join(playlist_name).strip()
+
+        async def after():
+            _embed = embed_utils.create_music_embed(
+                description=f"Плейлист с названием **{playlist_name}** удален"
+            )
+            await ctx.send(embed=_embed)
+
+        await self._check_for_playlist(
+            playlists_utils.delete_playlist,
+            [ctx.guild.id, playlist_name],
+            after, ctx
+        )
 
     async def _leaving(self, voice: discord.VoiceClient, guild_id):
         """
@@ -831,6 +904,7 @@ class Player(commands.Cog):
             if voice and not voice.is_connected() and after.channel is None:
                 try:
                     del self.tracks[member.guild.id]
+                    await self._stop(voice, force=True)
                 except KeyError:
                     pass
                 finally:

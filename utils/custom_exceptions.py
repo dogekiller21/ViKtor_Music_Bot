@@ -19,3 +19,11 @@ class IncorrectVoiceChannel(CommandError):
 
 class ToManyPlaylists(Exception):
     pass
+
+
+class NoGuildPlaylists(Exception):
+    pass
+
+
+class PlaylistNotFound(Exception):
+    pass
