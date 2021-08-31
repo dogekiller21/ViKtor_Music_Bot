@@ -448,7 +448,7 @@ class Player(commands.Cog):
     async def stop_command(self, ctx: commands.Context):
         """Полностью останавливает проигрывание треков в гильдии, очищает очередь.
         Если бот не будет проигрывать ничего в течении 2х минут, он обидится и уйдет"""
-        if voice := ctx.voice_client is None:
+        if (voice := ctx.voice_client) is None:
             return
 
         if not (voice.is_playing() or voice.is_paused()):

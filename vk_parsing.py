@@ -19,7 +19,10 @@ def optimize_link(link: str) -> dict:
         owner_id, playlist_id, access_key = temp.split("_")
     elif link.startswith("https://vk.com/music/playlist/"):
         temp = link.split("/playlist/")[1]
-        owner_id, playlist_id = temp.split("_")
+        if len(temp := temp.split("_")) > 2:
+            owner_id, playlist_id, access_key = temp
+        else:
+            owner_id, playlist_id = temp
     else:
         temp = link.split("audio_playlist")[1]
         owner_id, temp2 = temp.split("_")
@@ -42,7 +45,7 @@ def optimize_link(link: str) -> dict:
 
 def get_thumb(track_info: dict):
     if "album" not in track_info or "thumb" not in track_info["album"]:
-        return "https://avatanplus.ru/files/resources/original/567059bd72e8a151a6de8c1f.png"
+        return "https://cdn.discordapp.com/attachments/248145752352620546/876452830049894451/MHUm5Vaje2M.png"
     return track_info["album"]["thumb"]["photo_270"]
 
 
@@ -59,6 +62,8 @@ async def get_audio(url: str, requester) -> list:
     for item in response["response"]["items"]:
         image = get_thumb(item)
         name = f"{item['title']} - {item['artist']}"
+
+        item["url"] = item["url"].split("?extra")[0]  # убирается, судя по всему, необязательная часть ссылки
         tracks.append({
             "url": item["url"],
             "name": name,
@@ -81,6 +86,8 @@ async def get_single_audio(requester, name: str, count: int = 1) -> Union[dict, 
         item = items[0]
         name = f"{item['title']} - {item['artist']}"
         image = get_thumb(item)
+
+        item["url"] = item["url"].split("?extra")[0]  # убирается, судя по всему, необязательная часть ссылки
         return {
             "url": item["url"],
             "name": name,
