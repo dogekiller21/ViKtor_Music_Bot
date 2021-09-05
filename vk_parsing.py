@@ -49,6 +49,21 @@ def get_thumb(track_info: dict):
     return track_info["album"]["thumb"]["photo_270"]
 
 
+def get_track_info(item, requester):
+    image = get_thumb(item)
+    name = f"{item['title']} - {item['artist']}"
+    item["url"] = item["url"].split("?extra")[0]
+    track_id = f"{item['owner_id']}_{item['id']}"
+    return {
+        "url": item["url"],
+        "name": name,
+        "duration": item["duration"],
+        "thumb": image,
+        "requester": requester,
+        "id": track_id
+    }
+
+
 async def get_audio(url: str, requester) -> list:
     # https://vk.com/music/album/-2000775086_8775086_3020c01f90d96ecf46
     # https://vk.com/audios283345310?z=audio_playlist-2000775086_8775086%2F3020c01f90d96ecf46
@@ -60,18 +75,9 @@ async def get_audio(url: str, requester) -> list:
     tracks = []
     response = await api.get_context().api_request(method_name="audio.get", params=params)
     for item in response["response"]["items"]:
-        image = get_thumb(item)
-        name = f"{item['title']} - {item['artist']}"
 
-        item["url"] = item["url"].split("?extra")[0]  # убирается, судя по всему, необязательная часть ссылки
-        tracks.append({
-            "url": item["url"],
-            "name": name,
-            "duration": item["duration"],
-            "thumb": image,
-            "requester": requester
-        }
-        )
+        track = get_track_info(item, requester)
+        tracks.append(track)
     return tracks
 
 
@@ -84,26 +90,25 @@ async def get_single_audio(requester, name: str, count: int = 1) -> Union[dict, 
         raise NoTracksFound(f"No tracks matches request {name}")
     if count == 1:
         item = items[0]
-        name = f"{item['title']} - {item['artist']}"
-        image = get_thumb(item)
 
-        item["url"] = item["url"].split("?extra")[0]  # убирается, судя по всему, необязательная часть ссылки
-        return {
-            "url": item["url"],
-            "name": name,
-            "duration": item["duration"],
-            "thumb": image,
-            "requester": requester
-        }
+        track = get_track_info(item, requester)
+        return track
     items_list = []
     for item in items[:count]:
-        name = f"{item['title']} - {item['artist']}"
-        image = get_thumb(item)
-        items_list.append({
-            "url": item["url"],
-            "name": name,
-            "duration": item["duration"],
-            "thumb": image,
-            "requester": requester
-        })
+
+        track = get_track_info(item, requester)
+        items_list.append(track)
     return items_list
+
+
+async def get_tracks_by_id(tracks_ids: list[str]):
+    audios = ",".join(tracks_ids)
+    result = await api.get_context().api_request(
+        method_name="audio.getById", params={"audios": audios}
+    )
+    items = result["response"]
+    tracks = []
+    for item in items:
+        track = get_track_info(item, None)
+        tracks.append(track)
+    return tracks

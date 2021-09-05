@@ -16,9 +16,9 @@ def save_playlists(data):
 
 
 def save_new_playlist(guild_id, playlist: list, name: str = None):
-    playlist_1 = copy.deepcopy(playlist)
-    [item.pop("requester", 0) for item in playlist_1]
-
+    # playlist_1 = copy.deepcopy(playlist)
+    # [item.pop("requester", 0) for item in playlist_1]
+    new_playlist = [{"id": track["id"]} for track in playlist]
     playlists = get_playlists()
 
     guild_id = str(guild_id)
@@ -33,7 +33,7 @@ def save_new_playlist(guild_id, playlist: list, name: str = None):
         name = name.strip()
 
     date = datetime.date.today()
-    guild_playlists[name] = {"tracks": playlist_1,
+    guild_playlists[name] = {"tracks": new_playlist,
                              "date": date.toordinal()}
     playlists[guild_id] = guild_playlists
 
@@ -68,8 +68,11 @@ def delete_playlist(guild_id, playlist_name):
         raise NoGuildPlaylists
     if playlist_name not in guild_playlists:
         raise PlaylistNotFound
-    del guild_playlists[playlist_name]
     playlists = get_playlists()
-    playlists[str(guild_id)] = guild_playlists
+    if len(guild_playlists) == 1:
+        del playlists[str(guild_id)]
+    else:
+        del guild_playlists[playlist_name]
+        playlists[str(guild_id)] = guild_playlists
 
     save_playlists(playlists)

@@ -61,7 +61,7 @@ class Player(commands.Cog):
         return dur
 
     def get_requester(self, track: dict):
-        if "requester" not in track:
+        if ("requester" not in track) or track["requester"] is None:
             return
         user = self.client.get_user(track["requester"])
         if user is not None:
@@ -370,11 +370,14 @@ class Player(commands.Cog):
             await self.delete_messages(ctx.guild.id)
 
             await self._stop(voice, force=False)
-            await asyncio.sleep(.5)  # Ебучий случай начинает скипать треки, удалять сообщения просто потому что
         tracks = playlists[name]["tracks"]
-        self.tracks[ctx.guild.id] = {"tracks": tracks, "index": 0}
+        id_list = []
+        for track in tracks:
+            id_list.append(track["id"])
+        new_tracks = await vk_parsing.get_tracks_by_id(id_list)
+        self.tracks[ctx.guild.id] = {"tracks": new_tracks, "index": 0}
 
-        voice.play(discord.FFmpegPCMAudio(source=tracks[0]["url"]),
+        voice.play(discord.FFmpegPCMAudio(source=new_tracks[0]["url"]),
                    after=lambda x: self.play_next(x, voice, ctx))
         await self.player_command(ctx)
 
@@ -786,7 +789,7 @@ class Player(commands.Cog):
                 message=f"Не найдено плейлиста по запросу: `{playlist_name}`"
             )
             await ctx.send(embed=embed)
-        finally:
+        else:
             await after()
 
     @commands.command(name="rename")
