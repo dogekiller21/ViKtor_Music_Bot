@@ -1,15 +1,14 @@
-import asyncio
 from typing import Union
 
-from cfg import VK_ME_TOKEN
+from .config import TokenConfig
 from vkwave.api import API
 
 from vkwave.client import AIOHTTPClient
 
-from utils.custom_exceptions import NoTracksFound
+from .utils.custom_exceptions import NoTracksFound
 
 client = AIOHTTPClient()
-api = API(clients=client, tokens=VK_ME_TOKEN, api_version="5.90")
+api = API(clients=client, tokens=TokenConfig.VK_ME_TOKEN, api_version="5.90")
 
 
 def optimize_link(link: str) -> dict:
@@ -34,13 +33,10 @@ def optimize_link(link: str) -> dict:
         return {
             "owner_id": int(owner_id),
             "playlist_id": int(playlist_id),
-            "access_key": access_key
+            "access_key": access_key,
         }
     else:
-        return {
-            "owner_id": int(owner_id),
-            "playlist_id": int(playlist_id)
-        }
+        return {"owner_id": int(owner_id), "playlist_id": int(playlist_id)}
 
 
 def get_thumb(track_info: dict):
@@ -60,7 +56,7 @@ def get_track_info(item, requester):
         "duration": item["duration"],
         "thumb": image,
         "requester": requester,
-        "id": track_id
+        "id": track_id,
     }
 
 
@@ -73,7 +69,9 @@ async def get_audio(url: str, requester) -> list:
     params = optimize_link(link=url)
 
     tracks = []
-    response = await api.get_context().api_request(method_name="audio.get", params=params)
+    response = await api.get_context().api_request(
+        method_name="audio.get", params=params
+    )
     for item in response["response"]["items"]:
 
         track = get_track_info(item, requester)

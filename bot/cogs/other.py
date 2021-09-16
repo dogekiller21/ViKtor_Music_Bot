@@ -5,14 +5,14 @@ import discord
 from discord.ext import commands
 from discord.ext.commands import CommandError
 
-from utils import embed_utils
+from bot.utils import embed_utils
 
-from bot import DEFAULT_PREFIX, get_prefix
+from ..bot import DEFAULT_PREFIX, get_prefix
+from ..config import PathConfig
 
 
 class Other(commands.Cog):
-    """Дополнительные команды
-    """
+    """Дополнительные команды"""
 
     def __init__(self, client):
         self.client = client
@@ -21,7 +21,7 @@ class Other(commands.Cog):
         self.bug_color = 0x46C0C2
 
     def _edit_prefix(self, guild_id, prefix):
-        with open("prefixes.json", "r") as file:
+        with open(PathConfig.PREFIXES, "r") as file:
             data = json.load(file)
         if prefix is None:
             try:
@@ -31,7 +31,7 @@ class Other(commands.Cog):
         else:
             data[str(guild_id)] = prefix
 
-        with open("prefixes.json", "w") as file:
+        with open(PathConfig.PREFIXES, "w") as file:
             json.dump(data, file)
 
     @commands.command(name="prefix")
@@ -40,7 +40,9 @@ class Other(commands.Cog):
     async def prefix_command(self, ctx: commands.Context, prefix: Optional[str] = None):
         """Изменение префикса для гильдии. Если префикс будет оканчиваться на обычную букву или цифру,
         к нему будет добавлена . (например, test -> test.)"""
-        if prefix is not None and not prefix.endswith((".", "!", "@", "_", "*", "$", "%", "#", "^", "&", "/")):
+        if prefix is not None and not prefix.endswith(
+            (".", "!", "@", "_", "*", "$", "%", "#", "^", "&", "/")
+        ):
             prefix += "."
         self._edit_prefix(ctx.guild.id, prefix)
         if prefix is None:
@@ -48,7 +50,7 @@ class Other(commands.Cog):
         embed = embed_utils.create_info_embed(
             title="Префикс изменен",
             description=f"Теперь команды в вашей гильдии должны начинаться с `{prefix}`\n"
-                        f"Пример: `{prefix}help`"
+            f"Пример: `{prefix}help`",
         )
         await ctx.send(embed=embed)
 
@@ -59,12 +61,12 @@ class Other(commands.Cog):
 
         if not data:
             embed = discord.Embed(
-                title='Команды и модули',
-                description=f'Используйте `{prefix}help <модуль>`, чтобы получить подробную информацию\n',
-                color=self.normal_color
+                title="Команды и модули",
+                description=f"Используйте `{prefix}help <модуль>`, чтобы получить подробную информацию\n",
+                color=self.normal_color,
             )
 
-            cogs_desc = ''
+            cogs_desc = ""
             for cog in self.client.cogs:
                 passed = 0
                 _cog = self.client.get_cog(cog)
@@ -75,54 +77,72 @@ class Other(commands.Cog):
                     except CommandError:
                         pass
                 if passed != 0:
-                    cogs_desc += f'`{cog}` {self.client.cogs[cog].__doc__}\n'
+                    cogs_desc += f"`{cog}` {self.client.cogs[cog].__doc__}\n"
 
-            embed.add_field(name='Модули', value=cogs_desc, inline=False)
+            embed.add_field(name="Модули", value=cogs_desc, inline=False)
 
-            commands_desc = ''
+            commands_desc = ""
             for command in self.client.walk_commands():
                 if not command.cog_name and not command.hidden:
-                    commands_desc += f'{command.name} - {command.help}\n'
+                    commands_desc += f"{command.name} - {command.help}\n"
 
             if commands_desc:
-                embed.add_field(name='Не относящиеся к модулю', value=commands_desc, inline=False)
+                embed.add_field(
+                    name="Не относящиеся к модулю", value=commands_desc, inline=False
+                )
 
         elif len(data) == 1:
 
             for cog in self.client.cogs:
                 if cog.lower() == data[0].lower():
 
-                    embed = discord.Embed(title=f'Команды в модуле {cog}',
-                                          color=self.normal_color)
+                    embed = discord.Embed(
+                        title=f"Команды в модуле {cog}", color=self.normal_color
+                    )
 
                     for command in self.client.get_cog(cog).get_commands():
                         if not command.hidden:
                             try:
                                 await command.can_run(ctx)
-                                embed.add_field(name=f"`{prefix}{command.name}`", value=command.help, inline=False)
+                                embed.add_field(
+                                    name=f"`{prefix}{command.name}`",
+                                    value=command.help,
+                                    inline=False,
+                                )
                             except CommandError:
                                 pass
                     if not embed.fields:
-                        embed.add_field(name=":(", value="Нет команд, которые вы можете использовать")
+                        embed.add_field(
+                            name=":(",
+                            value="Нет команд, которые вы можете использовать",
+                        )
 
                     break
 
             else:
-                embed = discord.Embed(title="Что это?",
-                                      description=f"Никогда не слышал о модуле `{data[0]}`",
-                                      color=self.error_color)
-            embed.set_footer(text=ctx.author.display_name, icon_url=ctx.author.avatar_url)
+                embed = discord.Embed(
+                    title="Что это?",
+                    description=f"Никогда не слышал о модуле `{data[0]}`",
+                    color=self.error_color,
+                )
+            embed.set_footer(
+                text=ctx.author.display_name, icon_url=ctx.author.avatar_url
+            )
 
         elif len(data) > 1:
-            embed = discord.Embed(title="Многовато",
-                                  description="Пожалуйста, вводите только один модуль за раз",
-                                  color=self.error_color)
+            embed = discord.Embed(
+                title="Многовато",
+                description="Пожалуйста, вводите только один модуль за раз",
+                color=self.error_color,
+            )
 
         else:
-            embed = discord.Embed(title="",
-                                  description="Кажется, вы обнаружили баг.\n"
-                                              "Пожалуйста, сообщите об этом мне dogekiller21#6067",
-                                  color=self.bug_color)
+            embed = discord.Embed(
+                title="",
+                description="Кажется, вы обнаружили баг.\n"
+                "Пожалуйста, сообщите об этом мне dogekiller21#6067",
+                color=self.bug_color,
+            )
 
         await ctx.send(embed=embed)
 

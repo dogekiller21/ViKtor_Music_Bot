@@ -3,8 +3,8 @@ from typing import Optional
 import discord
 from discord.ext import commands
 
-import functions
-from utils import embed_utils
+from bot import functions
+from bot.utils import embed_utils
 
 
 def check_if_owner(ctx: commands.Context):
@@ -13,8 +13,7 @@ def check_if_owner(ctx: commands.Context):
 
 
 class Welcome(commands.Cog):
-    """Приветствие и выдача ролей новым пользователям. (!) Требуются права администратора для работы
-    """
+    """Приветствие и выдача ролей новым пользователям. (!) Требуются права администратора для работы"""
 
     def __init__(self, client):
         self.client = client
@@ -26,7 +25,7 @@ class Welcome(commands.Cog):
         """Изменение канала для приветствия. После команды достаточно упомянуть канал или написать его id"""
         if not channel_id:
             channel_id = ctx.channel.id
-            msg_end = f'этом канале'
+            msg_end = f"этом канале"
         elif not channel_id.isdigit():
             embed = embed_utils.create_error_embed(
                 message="ID канала может состоять только из цифр"
@@ -35,18 +34,20 @@ class Welcome(commands.Cog):
 
         else:
             channel_id = int(channel_id)
-            msg_end = f'канале с id {channel_id}'
+            msg_end = f"канале с id {channel_id}"
 
         functions.write_welcome_channel(ctx.guild.id, channel_id)
         embed = discord.Embed(
-            description=f'Теперь приветствие для новых пользователей будет писаться в {msg_end}'
+            description=f"Теперь приветствие для новых пользователей будет писаться в {msg_end}"
         )
         await ctx.send(embed=embed)
 
     @commands.command(name="welcome_role", pass_context=True)
     @commands.guild_only()
     @commands.has_guild_permissions(administrator=True)
-    async def welcome_role_command(self, ctx: commands.Context, role: Optional[discord.Role]):
+    async def welcome_role_command(
+        self, ctx: commands.Context, role: Optional[discord.Role]
+    ):
         """Изменение роли для новых пользователей. После команды упомяните роль, которую хотите задать.
         Если команда будет написана без роли, бот подскажет какая роль установлена сейчас"""
 
@@ -54,13 +55,13 @@ class Welcome(commands.Cog):
             role_id = functions.get_guild_smf(ctx.guild.id, "welcome_role_id")
             role = discord.utils.get(ctx.guild.roles, id=role_id)
             embed = discord.Embed(
-                description=f'Текущая роль для новых пользователей {role.mention}'
+                description=f"Текущая роль для новых пользователей {role.mention}"
             )
 
             await ctx.send(embed=embed)
         else:
             embed = discord.Embed(
-                description=f'Теперь новым пользователям будет выдаваться роль {role.mention}'
+                description=f"Теперь новым пользователям будет выдаваться роль {role.mention}"
             )
             await ctx.send(embed=embed)
             functions.write_welcome_role(ctx.guild.id, role.id)
@@ -81,9 +82,9 @@ class Welcome(commands.Cog):
         if role:
             await self._give_role(member, role)
         message = discord.Embed(
-            title='Новый пользователь!',
-            description=f'Добро пожаловать, кожаный ублюдок {member.mention}',
-            color=0x0a7cff
+            title="Новый пользователь!",
+            description=f"Добро пожаловать, кожаный ублюдок {member.mention}",
+            color=0x0A7CFF,
         )
 
         await msg_channel.send(embed=message)

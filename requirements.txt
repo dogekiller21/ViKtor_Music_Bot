@@ -16,3 +16,4 @@ typing-extensions==3.7.4.3
 urllib3==1.26.4
 vkwave @ https://github.com/fscdev/vkwave/archive/master.zip
 yarl==1.6.3
+python-dotenv

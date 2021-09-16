@@ -1,17 +1,17 @@
-import copy
 import json
 import datetime
 
-from utils.custom_exceptions import ToManyPlaylists, NoGuildPlaylists, PlaylistNotFound
+from bot.config import PathConfig
+from bot.utils.custom_exceptions import ToManyPlaylists, NoGuildPlaylists, PlaylistNotFound
 
 
 def get_playlists():
-    with open("playlists.json", "r", encoding="utf-8") as file:
+    with open(PathConfig.PLAYLISTS, encoding="utf-8") as file:
         return json.load(file)
 
 
 def save_playlists(data):
-    with open("playlists.json", "w", encoding="utf-8") as file:
+    with open(PathConfig.PLAYLISTS, "w", encoding="utf-8") as file:
         json.dump(data, file, ensure_ascii=False, indent=2)
 
 
@@ -33,8 +33,7 @@ def save_new_playlist(guild_id, playlist: list, name: str = None):
         name = name.strip()
 
     date = datetime.date.today()
-    guild_playlists[name] = {"tracks": new_playlist,
-                             "date": date.toordinal()}
+    guild_playlists[name] = {"tracks": new_playlist, "date": date.toordinal()}
     playlists[guild_id] = guild_playlists
 
     save_playlists(playlists)
