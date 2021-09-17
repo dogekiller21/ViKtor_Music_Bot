@@ -23,11 +23,7 @@ def update_json(file: JsonFile):
             data = file.get()
             result = function(*args, **kwargs, json_data=data)
 
-            new_data = result
-            if isinstance(result, tuple):
-                new_data = result[0]
-            if new_data is not None:
-                file.write(new_data)
+            file.write(data)
             return result
 
         return wrapper

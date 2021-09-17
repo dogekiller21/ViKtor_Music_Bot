@@ -774,7 +774,7 @@ class Player(commands.Cog):
         else:
             name = " ".join(name).strip()
         try:
-            _, playlist_name = playlists_utils.save_new_playlist(
+            playlist_name = playlists_utils.save_new_playlist(
                 ctx.guild.id, playlist, name=name
             )
             embed = embed_utils.create_music_embed(

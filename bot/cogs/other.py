@@ -24,7 +24,7 @@ class Other(commands.Cog):
     @update_json(PrefixesFile)
     def _edit_prefix(
         self, guild_id: int, prefix: Optional[str], json_data: JSON_DATA
-    ) -> Optional[JSON_DATA]:
+    ) -> None:
         guild_id = str(guild_id)
         if prefix is None:
             if json_data.get(guild_id) is None:
@@ -32,7 +32,6 @@ class Other(commands.Cog):
             del json_data[guild_id]
         else:
             json_data[guild_id] = prefix
-        return json_data
 
     @commands.command(name="prefix")
     @commands.guild_only()
