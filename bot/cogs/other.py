@@ -23,7 +23,7 @@ class Other(commands.Cog):
 
     @update_json(PrefixesFile)
     def _edit_prefix(
-        self, guild_id: int, prefix: Optional[str], json_data: JSON_DATA
+            self, guild_id: int, prefix: Optional[str], json_data: JSON_DATA
     ) -> None:
         guild_id = str(guild_id)
         if prefix is None:
@@ -49,7 +49,7 @@ class Other(commands.Cog):
         embed = embed_utils.create_info_embed(
             title="Префикс изменен",
             description=f"Теперь команды в вашей гильдии должны начинаться с `{prefix}`\n"
-            f"Пример: `{prefix}help`",
+                        f"Пример: `{prefix}help`",
         )
         await ctx.send(embed=embed)
 
@@ -91,32 +91,33 @@ class Other(commands.Cog):
                 )
 
         elif len(data) == 1:
-
             for cog in self.client.cogs:
-                if cog.lower() == data[0].lower():
+                if cog.lower() != data[0].lower():
+                    continue
 
-                    embed = discord.Embed(
-                        title=f"Команды в модуле {cog}", color=self.normal_color
+                embed = discord.Embed(
+                    title=f"Команды в модуле {cog}", color=self.normal_color
+                )
+
+                for command in self.client.get_cog(cog).get_commands():
+                    if command.hidden:
+                        continue
+                    try:
+                        await command.can_run(ctx)
+                        embed.add_field(
+                            name=f"`{prefix}{command.name}`",
+                            value=command.help,
+                            inline=False,
+                        )
+                    except CommandError:
+                        continue
+                if not embed.fields:
+                    embed.add_field(
+                        name=":(",
+                        value="Нет команд, которые вы можете использовать",
                     )
 
-                    for command in self.client.get_cog(cog).get_commands():
-                        if not command.hidden:
-                            try:
-                                await command.can_run(ctx)
-                                embed.add_field(
-                                    name=f"`{prefix}{command.name}`",
-                                    value=command.help,
-                                    inline=False,
-                                )
-                            except CommandError:
-                                pass
-                    if not embed.fields:
-                        embed.add_field(
-                            name=":(",
-                            value="Нет команд, которые вы можете использовать",
-                        )
-
-                    break
+                break
 
             else:
                 embed = discord.Embed(
@@ -139,7 +140,7 @@ class Other(commands.Cog):
             embed = discord.Embed(
                 title="",
                 description="Кажется, вы обнаружили баг.\n"
-                "Пожалуйста, сообщите об этом мне dogekiller21#6067",
+                            "Пожалуйста, сообщите об этом мне dogekiller21#6067",
                 color=self.bug_color,
             )
 

@@ -44,32 +44,31 @@ class Player(commands.Cog):
     def get_pages(self, guild_id, page: Optional[int] = None):
         tracks = self.tracks[guild_id]["tracks"]
         now_playing = self.tracks[guild_id]["index"]
-        if (len(tracks) % 10) == 0:
-            pages = int(len(tracks) / 10)
-        else:
-            pages = int((len(tracks) / 10)) + 1
+        tracks_value = len(tracks)
+        pages = tracks_value // 10
+        if tracks_value % 10 != 0:
+            pages += 1
 
         if page is None:
-            if ((now_playing + 1) % 10) != 0:
-                page = (now_playing + 1) // 10 + 1
-            else:
-                page = (now_playing + 1) // 10
+            current_now_playing = now_playing + 1
+            page = current_now_playing // 10
+            if (current_now_playing % 10) != 0:
+                page += 1
         return page, pages
 
     def _get_duration(self, duration: int) -> str:
-        hours = duration // 3600
-        minutes = (duration % 3600) // 60
-        seconds = (duration % 3600) % 60
-        dur = f""
-        if hours != 0:
-            dur += f"{hours}:"
-        dur += f"{minutes:02d}:{seconds:02d}"
-        return dur
+        date = (datetime.datetime.fromordinal(1) + datetime.timedelta(seconds=duration))
+        duration = f""
+        if date.hour != 0:
+            duration += f"{date.hour}:"
+        duration += f"{date.minute}:{date.second}"
+        return duration
 
     def get_requester(self, track: dict):
-        if ("requester" not in track) or track["requester"] is None:
+        requester = track.get("requester")
+        if requester is None:
             return
-        user = self.client.get_user(track["requester"])
+        user = self.client.get_user(requester)
         if user is not None:
             return {"text": user.display_name, "icon_url": user.avatar_url}
         return {
@@ -122,15 +121,8 @@ class Player(commands.Cog):
         return embed
 
     # Loop settings in string format for embed footer
-    def _get_loop_str(self, guild: Guild):
-        loop_settings = functions.get_guild_smf(guild, "loop_queue")
-        cliche = "Зацикливание очереди **{}**"
-        if loop_settings:
-            return cliche.format("включено")
-        return cliche.format("выключено")
-
     def _get_loop_str_min(self, guild: Guild):
-        loop_settings = functions.get_guild_smf(guild, "loop_queue")
+        loop_settings = functions.get_guild_data(guild, "loop_queue")
         cliche = "Зацикливание **{}**"
         if loop_settings:
             return cliche.format("вкл")
@@ -218,7 +210,7 @@ class Player(commands.Cog):
 
         :return: Union[int, None]
         """
-        is_looping = functions.get_guild_smf(ctx.guild, "loop_queue")
+        is_looping = functions.get_guild_data(ctx.guild, "loop_queue")
         if is_looping:
             return default
 
@@ -672,7 +664,7 @@ class Player(commands.Cog):
     @commands.guild_only()
     async def loop_command(self, ctx: commands.Context):
         """Изменить настройки зацикливания очереди"""
-        is_looped = functions.get_guild_smf(ctx.guild, "loop_queue")
+        is_looped = functions.get_guild_data(ctx.guild, "loop_queue")
         functions.change_loop_option(ctx.guild.id, not is_looped)
         if ctx.message.author.bot:
             await self.player_message_update(ctx)

@@ -52,7 +52,7 @@ class Welcome(commands.Cog):
         Если команда будет написана без роли, бот подскажет какая роль установлена сейчас"""
 
         if not role:
-            role_id = functions.get_guild_smf(ctx.guild.id, "welcome_role_id")
+            role_id = functions.get_guild_data(ctx.guild.id, "welcome_role_id")
             role = discord.utils.get(ctx.guild.roles, id=role_id)
             embed = discord.Embed(
                 description=f"Текущая роль для новых пользователей {role.mention}"
@@ -76,8 +76,8 @@ class Welcome(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-        channel = functions.get_guild_smf(member.guild.id, "welcome_channel_id")
-        role = functions.get_guild_smf(member.guild.id, "welcome_role_id")
+        channel = functions.get_guild_data(member.guild.id, "welcome_channel_id")
+        role = functions.get_guild_data(member.guild.id, "welcome_role_id")
         msg_channel = self.client.get_channel(channel)
         if role:
             await self._give_role(member, role)
