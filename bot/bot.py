@@ -8,15 +8,17 @@ from discord.ext import commands
 
 import os
 
+from .utils.file_utils import PrefixesFile
+
 DEFAULT_PREFIX = "-"
 
 
 def get_prefix(_, message: discord.Message):
-    with open(PathConfig.PREFIXES, "r") as file:
-        try:
-            return json.load(file)[str(message.guild.id)]
-        except KeyError:
-            return DEFAULT_PREFIX
+    prefixes_data = PrefixesFile.get()
+    current_prefix = prefixes_data.get(str(message.guild.id))
+    if current_prefix is None:
+        return DEFAULT_PREFIX
+    return current_prefix
 
 
 intents = discord.Intents.all()
@@ -44,7 +46,7 @@ def run():
 
     client.remove_command("help")
     for filename in os.listdir(cogs_path.format(delimiter="/")):
-        if filename == "__init__.py":
+        if filename in ["__init__.py", "constants.py"]:
             continue
         if filename.endswith(".py"):
             client.load_extension(f"{cogs_path.format(delimiter='.')}.{filename[:-3]}")

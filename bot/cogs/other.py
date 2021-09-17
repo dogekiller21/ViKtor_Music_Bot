@@ -6,9 +6,12 @@ from discord.ext import commands
 from discord.ext.commands import CommandError
 
 from bot.utils import embed_utils
+from .constants import GREEN_COLOR, TURQUOISE_COLOR, BROWN_COLOR
+from .._types import JSON_DATA
 
 from ..bot import DEFAULT_PREFIX, get_prefix
 from ..config import PathConfig
+from ..utils.file_utils import PrefixesFile, update_json
 
 
 class Other(commands.Cog):
@@ -16,30 +19,31 @@ class Other(commands.Cog):
 
     def __init__(self, client):
         self.client = client
-        self.normal_color = 0x5CC347
-        self.error_color = 0xC27746
-        self.bug_color = 0x46C0C2
+        self.normal_color = GREEN_COLOR
+        self.error_color = BROWN_COLOR
+        self.bug_color = TURQUOISE_COLOR
 
-    def _edit_prefix(self, guild_id, prefix):
-        with open(PathConfig.PREFIXES, "r") as file:
-            data = json.load(file)
+    @update_json(PrefixesFile)
+    def _edit_prefix(
+        self, guild_id: int, prefix: Optional[str], json_data: JSON_DATA
+    ) -> Optional[JSON_DATA]:
+        guild_id = str(guild_id)
         if prefix is None:
-            try:
-                del data[str(guild_id)]
-            except KeyError:
+            if json_data.get(guild_id) is None:
                 return
+            del json_data[guild_id]
         else:
-            data[str(guild_id)] = prefix
-
-        with open(PathConfig.PREFIXES, "w") as file:
-            json.dump(data, file)
+            json_data[guild_id] = prefix
+        return json_data
 
     @commands.command(name="prefix")
     @commands.guild_only()
     @commands.has_guild_permissions(administrator=True)
     async def prefix_command(self, ctx: commands.Context, prefix: Optional[str] = None):
-        """Изменение префикса для гильдии. Если префикс будет оканчиваться на обычную букву или цифру,
-        к нему будет добавлена . (например, test -> test.)"""
+        """
+        Изменение префикса для гильдии. Если префикс будет оканчиваться на обычную букву или цифру,
+        к нему будет добавлена точка (например, test -> test.)
+        """
         if prefix is not None and not prefix.endswith(
             (".", "!", "@", "_", "*", "$", "%", "#", "^", "&", "/")
         ):
