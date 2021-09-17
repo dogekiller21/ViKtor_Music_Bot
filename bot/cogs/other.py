@@ -1,4 +1,3 @@
-import json
 from typing import Optional
 
 import discord
@@ -6,11 +5,10 @@ from discord.ext import commands
 from discord.ext.commands import CommandError
 
 from bot.utils import embed_utils
-from .constants import GREEN_COLOR, TURQUOISE_COLOR, BROWN_COLOR
+from .constants import GREEN_COLOR, TURQUOISE_COLOR, BROWN_COLOR, GOOD_PREFIX_ENDING
 from .._types import JSON_DATA
 
 from ..bot import DEFAULT_PREFIX, get_prefix
-from ..config import PathConfig
 from ..utils.file_utils import PrefixesFile, update_json
 
 
@@ -44,13 +42,11 @@ class Other(commands.Cog):
         Изменение префикса для гильдии. Если префикс будет оканчиваться на обычную букву или цифру,
         к нему будет добавлена точка (например, test -> test.)
         """
-        if prefix is not None and not prefix.endswith(
-            (".", "!", "@", "_", "*", "$", "%", "#", "^", "&", "/")
-        ):
+        if prefix is not None and not prefix.endswith(GOOD_PREFIX_ENDING):
             prefix += "."
-        self._edit_prefix(ctx.guild.id, prefix)
         if prefix is None:
             prefix = DEFAULT_PREFIX
+        self._edit_prefix(ctx.guild.id, prefix)
         embed = embed_utils.create_info_embed(
             title="Префикс изменен",
             description=f"Теперь команды в вашей гильдии должны начинаться с `{prefix}`\n"
@@ -79,7 +75,7 @@ class Other(commands.Cog):
                         await command.can_run(ctx)
                         passed += 1
                     except CommandError:
-                        pass
+                        continue
                 if passed != 0:
                     cogs_desc += f"`{cog}` {self.client.cogs[cog].__doc__}\n"
 
