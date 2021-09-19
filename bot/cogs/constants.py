@@ -4,4 +4,6 @@ TURQUOISE_COLOR = 0x46C0C2
 
 GOOD_PREFIX_ENDING = (".", "!", "@", "_", "*", "$", "%", "#", "^", "&", "/", "-")
 PLAYER_EMOJI = ("🔀", "⏪", "▶", "⏩", "⏹", "🔁", "📑")
+QUEUE_EMOJI = ("⬅", "➡")
+
 VK_URL_PREFIX = "vk.com/"

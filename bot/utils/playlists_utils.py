@@ -1,4 +1,3 @@
-import json
 import datetime
 from typing import Optional
 
@@ -14,7 +13,7 @@ from bot.utils.file_utils import PlayListsFile, update_json
 @update_json(PlayListsFile)
 def save_new_playlist(
     guild_id: int, playlist: list, json_data: JSON_DATA, name: Optional[str] = None
-) -> str:
+) -> Optional[str]:
     # playlist_1 = copy.deepcopy(playlist)
     # [item.pop("requester", 0) for item in playlist_1]
     new_playlist = [{"id": track["id"]} for track in playlist]
@@ -24,7 +23,7 @@ def save_new_playlist(
 
     length = len(guild_playlists)
     if length >= 10:
-        raise ToManyPlaylists
+        return None
     if name is None:
         name = f"Playlist {length + 1}"
     else:

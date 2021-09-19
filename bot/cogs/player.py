@@ -2,15 +2,15 @@ import asyncio
 import datetime
 import traceback
 from random import shuffle
-from typing import Optional, Dict
+from typing import Optional, Dict, Sequence, Union
 
 import discord
-from discord import NotFound, Guild, Message
+from discord import NotFound, Guild, Message, Embed
 
 from discord.ext import commands
 
 from bot import vk_parsing, functions
-from .constants import PLAYER_EMOJI, VK_URL_PREFIX
+from .constants import PLAYER_EMOJI, VK_URL_PREFIX, QUEUE_EMOJI
 from ..utils import playlists_utils
 from ..utils import embed_utils
 from ..utils.custom_exceptions import (
@@ -29,7 +29,7 @@ class Player(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.tracks: dict[int, dict] = {}
-        self.queue_messages: dict[int, Message] = dict()
+        self.queue_messages: dict[int, dict[str, Union[int, Message]]] = dict()
         self.player_messages: dict[int, Message] = dict()
         self.loop = self.client.loop
 
@@ -76,11 +76,14 @@ class Player(commands.Cog):
             "icon_url": "https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png",
         }
 
-    def create_player_embed(self, ctx: commands.Context):
-        length = len(self.tracks[ctx.guild.id]["tracks"])
+    def create_player_embed(self, ctx: commands.Context) -> Optional[Embed]:
+        current_tracks = self.tracks.get(ctx.guild.id)
+        if current_tracks is None:
+            return
+        length = len(current_tracks["tracks"])
 
-        now_playing = self.tracks[ctx.guild.id]["index"]
-        tracks = self.tracks[ctx.guild.id]["tracks"]
+        now_playing = current_tracks["index"]
+        tracks = current_tracks["tracks"]
         prev_index, next_index = now_playing - 1, now_playing + 1
 
         embed = embed_utils.create_music_embed(
@@ -171,8 +174,8 @@ class Player(commands.Cog):
         )
         return embed
 
-    def _check_guild(self, guild_id: int):
-        return guild_id in [*self.tracks, *self.queue_messages]
+    def _check_guild(self, guild_id: int) -> bool:
+        return guild_id in self.tracks and guild_id in self.queue_messages
 
     async def queue_message_update(self, ctx) -> None:
         """
@@ -195,10 +198,11 @@ class Player(commands.Cog):
     async def player_message_update(self, ctx) -> None:
         if not self._check_guild(ctx.guild.id):
             return
-        try:
-            embed = self.create_player_embed(ctx)
-        except KeyError:  # TODO: откуда оно
+
+        embed = self.create_player_embed(ctx)
+        if embed is None:
             return
+
         await self.player_messages[ctx.guild.id].edit(embed=embed)
 
     async def queue_index_overflow(
@@ -291,6 +295,13 @@ class Player(commands.Cog):
             del messages_container[guild_id]
             await message.delete(delay=delay)
 
+    async def _add_reactions(self, emojis: Sequence[str], message: Message) -> None:
+        for emoji in emojis:
+            try:
+                await message.add_reaction(emoji)
+            except NotFound:
+                return
+
     @commands.command(name="player")
     @commands.guild_only()
     async def player_command(self, ctx: commands.Context) -> None:
@@ -303,11 +314,7 @@ class Player(commands.Cog):
         if ctx.guild.id in self.player_messages:
             await self.player_messages[ctx.guild.id].delete(delay=2)
         self.player_messages[ctx.guild.id] = player_message
-        for emoji in PLAYER_EMOJI:
-            try:
-                await player_message.add_reaction(emoji)
-            except NotFound:
-                return
+        await self._add_reactions(emojis=PLAYER_EMOJI, message=player_message)
 
     def _get_playlists_message(self, ctx):
         playlists = playlists_utils.get_single_guild_playlist(ctx.guild.id)
@@ -379,7 +386,7 @@ class Player(commands.Cog):
 
     @commands.command(name="play", aliases=["p"])
     @commands.guild_only()
-    async def play_command(self, ctx: commands.Context, *link: Optional[str]):
+    async def play_command(self, ctx: commands.Context, *link: Optional[str]) -> None:
         """Команда для проигрывания треков и плейлистов
         Если команда написана без аргументов после, бот попытается востановить проигрывание"""
 
@@ -435,7 +442,7 @@ class Player(commands.Cog):
 
     @commands.command(name="pause")
     @commands.guild_only()
-    async def pause_command(self, ctx: commands.Context):
+    async def pause_command(self, ctx: commands.Context) -> None:
         """Приостановить проигрывание"""
         voice = ctx.voice_client
         if not voice.is_playing():
@@ -446,7 +453,7 @@ class Player(commands.Cog):
 
     @commands.command(name="stop")
     @commands.guild_only()
-    async def stop_command(self, ctx: commands.Context):
+    async def stop_command(self, ctx: commands.Context) -> None:
         """Полностью останавливает проигрывание треков в гильдии, очищает очередь.
         Если бот не будет проигрывать ничего в течении 2х минут, он обидится и уйдет"""
         if (voice := ctx.voice_client) is None:
@@ -482,9 +489,7 @@ class Player(commands.Cog):
             await self.queue_messages[ctx.guild.id]["message"].delete(delay=2)
 
         self.queue_messages[ctx.guild.id] = {"message": queue_message, "page": page}
-        emoji_list = ["⬅", "➡"]
-        for emoji in emoji_list:
-            await queue_message.add_reaction(emoji)
+        await self._add_reactions(emojis=QUEUE_EMOJI, message=queue_message)
 
     @commands.command(name="shuffle", pass_context=True)
     @commands.guild_only()
@@ -497,19 +502,21 @@ class Player(commands.Cog):
                 return
             shuffle(tracks)
             self.tracks[ctx.guild.id] = {"tracks": tracks, "index": -1}
-            try:
+            if self.queue_messages.get(ctx.guild.id) is not None:
                 self.queue_messages[ctx.guild.id]["page"] = 1
-            except KeyError:
-                pass
+
             await self._stop(voice, force=False)
 
     @commands.command(name="skip", aliases=["sk"])
     @commands.guild_only()
-    async def skip_command(self, ctx: commands.Context, *, count: Optional[int] = 1):
+    async def skip_command(
+        self, ctx: commands.Context, *, count: Optional[int] = 1
+    ) -> None:
         """Пропустить один или несколько треков.
         Чтобы пропустить несколько треков необходимо добавить число к команде"""
         voice = ctx.voice_client
 
+        # TODO: таких проверок полно надо чета с ними придумать
         if ctx.guild.id not in self.tracks:
             return
 
@@ -526,7 +533,9 @@ class Player(commands.Cog):
 
     @commands.command(name="prev", aliases=["pr"], help="Вернуться к прошлому треку")
     @commands.guild_only()
-    async def prev_command(self, ctx: commands.Context, *, count: Optional[int] = 1):
+    async def prev_command(
+        self, ctx: commands.Context, *, count: Optional[int] = 1
+    ) -> None:
         """Вернуться на один или несколько треков назад.
         Про количество смотрите в команде **skip**"""
         voice = ctx.voice_client
@@ -546,39 +555,51 @@ class Player(commands.Cog):
             self.tracks[ctx.guild.id]["index"] = new_index - 1
             await self._stop(voice, force=False)
 
+    async def _get_tracks_data_by_name(
+        self, ctx: commands.Context, name: tuple[str], count: int = 1
+    ) -> Optional[Union[dict, list[dict]]]:
+        """
+        шлем ошибку или возвращаем трек(и)
+        """
+        name = " ".join(name)
+
+        try:
+            track = await vk_parsing.find_tracks_by_name(
+                requester=ctx.author.id, name=name, count=count
+            )
+        except Exception as err:
+            print(f"error: {err}")
+            embed = embed_utils.create_error_embed(
+                message=f"Неизвестная ошибка во время обработки запроса **({name})**"
+            )
+            await ctx.send(embed=embed, delete_after=5)
+            await ctx.message.add_reaction("❌")
+            return
+
+        if track is None:
+            embed = embed_utils.create_error_embed(
+                message=f"Не найдено треков по вашему запросу: **{name}**"
+            )
+            await ctx.send(embed=embed, delete_after=5)
+            await ctx.message.add_reaction("❌")
+            return
+
+        return track
+
     @commands.command(name="add", aliases=["add_to_queue"])
     @commands.guild_only()
     async def add_to_queue_command(
-        self, ctx: commands.Context, *name, track: Optional[list]
-    ):
+        self, ctx: commands.Context, *name: str, track: Optional[list]
+    ) -> None:
         """Добавить первый трек из поиска ВКонтакте в плейлист.
         Работает точно также, как и команда **play** с переданным туда именем трека"""
         await ctx.message.add_reaction("🎧")
 
         voice = ctx.voice_client
         if track is None:
-            name = " ".join(name)
-            try:
-                track = await vk_parsing.get_single_audio(
-                    requester=ctx.author.id, name=name
-                )
-
-            except NoTracksFound:
-                embed = embed_utils.create_error_embed(
-                    message=f"Не найдено треков по вашему запросу: **{name}**"
-                )
-                await ctx.send(embed=embed, delete_after=5)
-
-                return await ctx.message.add_reaction("❌")
-
-            except Exception as err:
-                print(f"error: {err}")
-                embed = embed_utils.create_error_embed(
-                    message=f"Неизвестная ошибка во время обработки запроса **({name})**"
-                )
-                await ctx.send(embed=embed, delete_after=5)
-
-                return await ctx.message.add_reaction("❌")
+            track = await self._get_tracks_data_by_name(ctx=ctx, name=name)
+            if track is None:
+                return
 
         if ctx.guild.id not in self.tracks:
             self.tracks[ctx.guild.id] = {"tracks": [track], "index": 0}
@@ -603,7 +624,7 @@ class Player(commands.Cog):
         try:
             await self.queue_message_update(ctx)
             await self.player_message_update(ctx)
-        except Exception as err:
+        except Exception as err:  # TODO: логгирование
             print(err)
 
     @commands.command(name="delete", aliases=["remove", "d"], pass_context=True)
@@ -625,12 +646,11 @@ class Player(commands.Cog):
         embed = embed_utils.create_music_embed(
             description=f"Удаляю трек: **{tracks[index - 1]['name']}**"
         )
-        queue_len = len(tracks)
         del tracks[index - 1]
         await ctx.message.add_reaction("✔")
         await ctx.send(embed=embed, delete_after=5)
         if index - 1 == now_playing:
-            if queue_len == 1:
+            if len(tracks) == 1:
                 await self.delete_messages(ctx.guild.id)
             else:
                 self.tracks[ctx.guild.id]["index"] = now_playing - 1
@@ -684,10 +704,10 @@ class Player(commands.Cog):
 
         voice = ctx.voice_client
         if voice.is_connected():
-            try:
+            current_tracks_data = self.tracks.get(ctx.guild.id)
+            if current_tracks_data is not None:
                 del self.tracks[ctx.guild.id]
-            except KeyError:
-                pass
+
             await self.delete_messages(ctx.guild.id)
 
             await voice.disconnect()
@@ -695,19 +715,13 @@ class Player(commands.Cog):
 
     @commands.command(name="search", aliases=["s"])
     @commands.guild_only()
-    async def search_command(self, ctx: commands.Context, *name):
+    async def search_command(self, ctx: commands.Context, *name: str):
         """Найти трек. Бот любезно предложит выбрать вам из 10ти(максимум) найденных треков один для проигрывания"""
         tracks = []
-        name = " ".join(name)
-        try:
-            tracks = await vk_parsing.get_single_audio(
-                requester=ctx.author.id, name=name, count=10
-            )
-        except NoTracksFound:
-            embed = embed_utils.create_error_embed(
-                f"Не найдено треков по вашему запросу: **{name}**"
-            )
-            return await ctx.send(embed=embed, delete_after=5)
+
+        tracks = await self._get_tracks_data_by_name(ctx=ctx, name=name, count=10)
+        if tracks is None:
+            return
 
         tracks_str_list = []
         for i, track in enumerate(tracks):
@@ -752,31 +766,31 @@ class Player(commands.Cog):
 
     @commands.command(name="save")
     @commands.guild_only()
-    async def save_playlist_command(self, ctx: commands.Context, *name):
+    async def save_playlist_command(self, ctx: commands.Context, *name: str):
         """Сохранить текущий плейлист"""
         if ctx.guild.id not in self.tracks:
             embed = embed_utils.create_error_embed(message="Нет треков в очереди")
             await ctx.send(embed=embed)
             return
         playlist = self.tracks[ctx.guild.id]["tracks"]
-        if len(name) == 0:
-            name = None
-        else:
-            name = " ".join(name).strip()
-        try:
-            playlist_name = playlists_utils.save_new_playlist(
-                ctx.guild.id, playlist, name=name
-            )
-            embed = embed_utils.create_music_embed(
-                title="Плейлист сохранен", description=f"Название: `{playlist_name}`"
-            )
-            await ctx.send(embed=embed)
-        except ToManyPlaylists:
+        current_name = None
+        if len(name) != 0:
+            current_name = " ".join(name).strip()
+
+        playlist_name = playlists_utils.save_new_playlist(
+            ctx.guild.id, playlist, name=current_name
+        )
+        if playlist_name is None:
             embed = embed_utils.create_error_embed(
                 message="В вашей гильдии сохранено слишком много плейлистов\n"
-                "Максимальное кол-во: `10`"
+                        "Максимальное кол-во: `10`"
             )
-            await ctx.send(embed=embed)
+            return await ctx.send(embed=embed)
+
+        embed = embed_utils.create_music_embed(
+            title="Плейлист сохранен", description=f"Название: `{playlist_name}`"
+        )
+        return await ctx.send(embed=embed)
 
     async def _check_for_playlist(self, _callable, args, after, ctx):
         playlist_name = args[1]

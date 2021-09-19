@@ -1,11 +1,9 @@
-from typing import Union
+from typing import Union, Optional
 
 from .config import TokenConfig
 from vkwave.api import API
 
 from vkwave.client import AIOHTTPClient
-
-from .utils.custom_exceptions import NoTracksFound
 
 client = AIOHTTPClient()
 api = API(clients=client, tokens=TokenConfig.VK_ME_TOKEN, api_version="5.90")
@@ -45,7 +43,7 @@ def get_thumb(track_info: dict):
     return track_info["album"]["thumb"]["photo_270"]
 
 
-def get_track_info(item, requester):
+def get_track_info(item: dict, requester: Optional[int]):
     image = get_thumb(item)
     name = f"{item['title']} - {item['artist']}"
     item["url"] = item["url"].split("?extra")[0]
@@ -79,24 +77,21 @@ async def get_audio(url: str, requester) -> list:
     return tracks
 
 
-async def get_single_audio(requester, name: str, count: int = 1) -> Union[dict, list]:
+async def find_tracks_by_name(
+    requester: int, name: str, count: int = 1
+) -> Optional[Union[dict, list]]:
     result = await api.get_context().api_request(
         method_name="audio.search", params={"q": name, "count": count}
     )
     items = result["response"]["items"]
-    if len(items) == 0:
-        raise NoTracksFound(f"No tracks matches request {name}")
+    if not items:
+        return None
     if count == 1:
         item = items[0]
 
-        track = get_track_info(item, requester)
-        return track
-    items_list = []
-    for item in items[:count]:
+        return get_track_info(item, requester)
 
-        track = get_track_info(item, requester)
-        items_list.append(track)
-    return items_list
+    return [get_track_info(item, requester) for item in items[:count]]
 
 
 async def get_tracks_by_id(tracks_ids: list[str]):
