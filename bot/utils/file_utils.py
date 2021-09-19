@@ -14,7 +14,7 @@ class JsonFile:
 
     def write(self, data: JSON_DATA) -> None:
         with open(self.file_name, "w", encoding="utf-8") as file:
-            file.write(json.dumps(data, ensure_ascii=False))
+            file.write(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 def update_json(file: JsonFile):
