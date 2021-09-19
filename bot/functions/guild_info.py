@@ -14,7 +14,6 @@ def get_guild_data(guild: Guild, what_to_search: str) -> Union[bool, str, None]:
         guild = functions.save_new_guild(
             guild_id=guild.id,
             owner_id=guild.owner_id,
-            welcome_channel=guild.text_channels[0].id,
         )
     else:
         guild = guilds_data[s_guild_id]

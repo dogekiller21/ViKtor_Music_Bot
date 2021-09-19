@@ -172,14 +172,17 @@ class Player(commands.Cog):
         )
         return embed
 
-    def _check_guild(self, guild_id: int) -> bool:
+    def _check_queue_msg(self, guild_id: int) -> bool:
         return guild_id in self.tracks and guild_id in self.queue_messages
+
+    def _check_player_msg(self, guild_id: int) -> bool:
+        return guild_id in self.tracks and guild_id in self.player_messages
 
     async def queue_message_update(self, ctx) -> None:
         """
         Update queue and player messages
         """
-        if not self._check_guild(ctx.guild.id):
+        if not self._check_queue_msg(ctx.guild.id):
             return
         page, _ = self.get_pages(ctx.guild.id)
         if page != (now_page := self.queue_messages[ctx.guild.id]["page"]):
@@ -194,7 +197,7 @@ class Player(commands.Cog):
             return
 
     async def player_message_update(self, ctx) -> None:
-        if not self._check_guild(ctx.guild.id):
+        if not self._check_player_msg(ctx.guild.id):
             return
 
         embed = self.create_player_embed(ctx)
@@ -585,36 +588,20 @@ class Player(commands.Cog):
 
         return track
 
-    @commands.command(name="add", aliases=["add_to_queue"])
-    @commands.guild_only()
-    async def add_to_queue_command(
-        self, ctx: commands.Context, *name: str, track: Optional[list]
+    async def _add_track_to_queue(
+        self, ctx: commands.Context, track: dict
     ) -> None:
-        """Добавить первый трек из поиска ВКонтакте в плейлист.
-        Работает точно также, как и команда **play** с переданным туда именем трека"""
-        await ctx.message.add_reaction("🎧")
-
-        voice = ctx.voice_client
-        if track is None:
-            track = await self._get_tracks_data_by_name(ctx=ctx, name=name)
-            if track is None:
-                return
-
         if ctx.guild.id not in self.tracks:
             self.tracks[ctx.guild.id] = {"tracks": [track], "index": 0}
-        else:
-            self.tracks[ctx.guild.id]["tracks"].append(track)
-
-        if not voice or not (voice.is_paused() or voice.is_playing()):
-            await self._join(ctx=ctx)
             voice = ctx.voice_client
-
             voice.play(
                 discord.FFmpegPCMAudio(source=track["url"]),
                 after=lambda x: self.play_next(x, voice, ctx),
             )
             await self.player_command(ctx)
             return
+
+        self.tracks[ctx.guild.id]["tracks"].append(track)
 
         embed = embed_utils.create_music_embed(
             title="Трек добавлен в очередь", description=track["name"]
@@ -716,7 +703,12 @@ class Player(commands.Cog):
     @commands.guild_only()
     async def search_command(self, ctx: commands.Context, *name: str):
         """Найти трек. Бот любезно предложит выбрать вам из 10ти(максимум) найденных треков один для проигрывания"""
+        await ctx.message.add_reaction("🎧")
         tracks = []
+
+        voice = ctx.voice_client
+        if not voice or not (voice.is_paused() or voice.is_playing()):
+            await self._join(ctx=ctx)
 
         tracks = await self._get_tracks_data_by_name(ctx=ctx, name=name, count=10)
         if tracks is None:
@@ -759,7 +751,7 @@ class Player(commands.Cog):
                 )
                 return
             track = tracks[int(msg.content) - 1]
-            await self.add_to_queue_command(ctx, "", track=track)
+            await self._add_track_to_queue(ctx, track=track)
         finally:
             await message.delete(delay=5)
 
@@ -882,7 +874,6 @@ class Player(commands.Cog):
             raise NoVoiceClient
 
     @play_command.before_invoke
-    @add_to_queue_command.before_invoke
     @search_command.before_invoke
     @playlist_command.before_invoke
     async def _check_member_voice(self, ctx: commands.Context):
