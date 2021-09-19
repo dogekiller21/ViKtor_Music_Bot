@@ -23,7 +23,7 @@ class Other(commands.Cog):
 
     @update_json(PrefixesFile)
     def _edit_prefix(
-            self, guild_id: int, prefix: Optional[str], json_data: JSON_DATA
+        self, guild_id: int, prefix: Optional[str], json_data: JSON_DATA
     ) -> None:
         guild_id = str(guild_id)
         if prefix is None:
@@ -49,7 +49,7 @@ class Other(commands.Cog):
         embed = embed_utils.create_info_embed(
             title="Префикс изменен",
             description=f"Теперь команды в вашей гильдии должны начинаться с `{prefix}`\n"
-                        f"Пример: `{prefix}help`",
+            f"Пример: `{prefix}help`",
         )
         await ctx.send(embed=embed)
 
@@ -140,7 +140,7 @@ class Other(commands.Cog):
             embed = discord.Embed(
                 title="",
                 description="Кажется, вы обнаружили баг.\n"
-                            "Пожалуйста, сообщите об этом мне dogekiller21#6067",
+                "Пожалуйста, сообщите об этом мне dogekiller21#6067",
                 color=self.bug_color,
             )
 

@@ -2,19 +2,19 @@ import asyncio
 import datetime
 import traceback
 from random import shuffle
-from typing import Optional
+from typing import Optional, Dict
 
 import discord
-from discord import NotFound, Guild
+from discord import NotFound, Guild, Message
 
 from discord.ext import commands
 
 from bot import vk_parsing, functions
+from .constants import PLAYER_EMOJI, VK_URL_PREFIX
 from ..utils import playlists_utils
 from ..utils import embed_utils
 from ..utils.custom_exceptions import (
     NoTracksFound,
-    EmptyQueue,
     NoVoiceClient,
     IncorrectVoiceChannel,
     ToManyPlaylists,
@@ -28,9 +28,9 @@ class Player(commands.Cog):
 
     def __init__(self, client):
         self.client = client
-        self.tracks = {}
-        self.queue_messages = {}
-        self.player_messages = {}
+        self.tracks: dict[int, dict] = {}
+        self.queue_messages: dict[int, Message] = dict()
+        self.player_messages: dict[int, Message] = dict()
         self.loop = self.client.loop
 
     async def nothing_is_playing_error(self, ctx: commands.Context):
@@ -41,7 +41,7 @@ class Player(commands.Cog):
 
         await ctx.message.add_reaction("❌")
 
-    def get_pages(self, guild_id, page: Optional[int] = None):
+    def get_pages(self, guild_id: int, page: Optional[int] = None) -> tuple[int, int]:
         tracks = self.tracks[guild_id]["tracks"]
         now_playing = self.tracks[guild_id]["index"]
         tracks_value = len(tracks)
@@ -57,7 +57,7 @@ class Player(commands.Cog):
         return page, pages
 
     def _get_duration(self, duration: int) -> str:
-        date = (datetime.datetime.fromordinal(1) + datetime.timedelta(seconds=duration))
+        date = datetime.datetime.fromordinal(1) + datetime.timedelta(seconds=duration)
         duration = f""
         if date.hour != 0:
             duration += f"{date.hour}:"
@@ -92,28 +92,28 @@ class Player(commands.Cog):
         if requester is not None:
             embed.set_footer(**requester)
         if prev_index >= 0:
-            dur = self._get_duration(tracks[prev_index]["duration"])
+            duration = self._get_duration(tracks[prev_index]["duration"])
             embed.add_field(
                 name="Предыдущий трек",
-                value=f"**{prev_index + 1}. {tracks[prev_index]['name']}** {dur}\n",
+                value=f"**{prev_index + 1}. {tracks[prev_index]['name']}** {duration}\n",
                 inline=False,
             )
 
         voice = ctx.voice_client
         title = "⟶ Приостановлен ⟵" if voice.is_paused() else "⟶ Сейчас играет ⟵"
 
-        dur = self._get_duration(tracks[now_playing]["duration"])
+        duration = self._get_duration(tracks[now_playing]["duration"])
         embed.add_field(
             name=title,
-            value=f"**{now_playing + 1}. {tracks[now_playing]['name']}** {dur}",
+            value=f"**{now_playing + 1}. {tracks[now_playing]['name']}** {duration}",
             inline=False,
         )
 
         if next_index < len(tracks):
-            dur = self._get_duration(tracks[next_index]["duration"])
+            duration = self._get_duration(tracks[next_index]["duration"])
             embed.add_field(
                 name="Следующий трек",
-                value=f"\n**{next_index + 1}. {tracks[next_index]['name']}** {dur}",
+                value=f"\n**{next_index + 1}. {tracks[next_index]['name']}** {duration}",
                 inline=False,
             )
 
@@ -129,61 +129,62 @@ class Player(commands.Cog):
         return cliche.format("выкл")
 
     # Queue embed
-    def create_queue_embed(self, ctx: commands.Context, page: Optional[int] = None):
+    def create_queue_embed(
+        self, ctx: commands.Context, page: Optional[int] = None
+    ) -> Optional[discord.Embed]:
         if ctx.guild.id not in self.tracks:
-            raise EmptyQueue
+            return None
         voice = ctx.voice_client
+
+        paused = False
         if voice.is_paused():
             paused = True
-        else:
-            paused = False
+
         page, pages = self.get_pages(ctx.guild.id, page)
         tracks = self.tracks[ctx.guild.id]["tracks"]
         now_playing = self.tracks[ctx.guild.id]["index"]
 
-        if page == 1:
-            page_index = 0
-        else:
+        page_index = 0
+        if page != 1:
             page_index = (page - 1) * 10
 
         tracks_to_str = []
-        for i, track in enumerate(tracks[page_index::]):
-            if i == 10:
-                break
+        for i, track in enumerate(tracks[page_index:10]):
 
-            dur = self._get_duration(track["duration"])
+            duration = self._get_duration(track["duration"])
             track_index = i + page_index
-            tracks_to_str.append(f"**{track_index + 1}. {track['name']}** {dur}")
-            if track_index == now_playing:
-                if paused:
-                    tracks_to_str[-1] += "\n↑ приостановлен ↑"
-                else:
-                    tracks_to_str[-1] += "\n↑ сейчас играет ↑"
+            tracks_to_str.append(f"**{track_index + 1}. {track['name']}** {duration}")
+            if track_index != now_playing:
+                continue
 
-        if (len(tracks)) > 10:
+            if paused:
+                tracks_to_str[-1] += "\n↑ приостановлен ↑"
+            else:
+                tracks_to_str[-1] += "\n↑ сейчас играет ↑"
+
+        pages = None
+        if len(tracks) > 10:
             pages = f"Страница: {page} / {pages}"
-        else:
-            pages = None
 
         embed = embed_utils.create_music_embed(
             description="\n\n".join(tracks_to_str), footer=pages
         )
         return embed
 
-    async def queue_message_update(self, ctx):
+    def _check_guild(self, guild_id: int):
+        return guild_id in [*self.tracks, *self.queue_messages]
+
+    async def queue_message_update(self, ctx) -> None:
         """
         Update queue and player messages
         """
-        if ctx.guild.id not in self.tracks:
-            return
-        if ctx.guild.id not in self.queue_messages:
+        if not self._check_guild(ctx.guild.id):
             return
         page, _ = self.get_pages(ctx.guild.id)
         if page != (now_page := self.queue_messages[ctx.guild.id]["page"]):
             now_page = None
-        try:
-            embed = self.create_queue_embed(ctx, page=now_page)
-        except EmptyQueue:
+        embed = self.create_queue_embed(ctx, page=now_page)
+        if embed is None:
             return
 
         try:
@@ -191,24 +192,20 @@ class Player(commands.Cog):
         except NotFound:
             return
 
-    async def player_message_update(self, ctx):
-        if ctx.guild.id not in self.tracks:
-            return
-        if ctx.guild.id not in self.player_messages:
+    async def player_message_update(self, ctx) -> None:
+        if not self._check_guild(ctx.guild.id):
             return
         try:
             embed = self.create_player_embed(ctx)
-        except KeyError:
+        except KeyError:  # TODO: откуда оно
             return
         await self.player_messages[ctx.guild.id].edit(embed=embed)
 
     async def queue_index_overflow(
         self, ctx: commands.Context, voice_client: discord.VoiceClient, default: int
-    ):
+    ) -> Optional[int]:
         """
         Invoke if index of next track to play is out of queue range
-
-        :return: Union[int, None]
         """
         is_looping = functions.get_guild_data(ctx.guild, "loop_queue")
         if is_looping:
@@ -226,7 +223,7 @@ class Player(commands.Cog):
 
         await self._stop(voice_client)
 
-    async def _stop(self, voice: discord.VoiceClient, force=True):
+    async def _stop(self, voice: discord.VoiceClient, force: bool = True) -> None:
         """
         ...VoiceClient.stop() with leave timer
 
@@ -246,9 +243,9 @@ class Player(commands.Cog):
         """
         user_channel = ctx.author.voice.channel
         if ctx.voice_client:
-            await ctx.voice_client.move_to(user_channel)
-        else:
-            await user_channel.connect()
+            return await ctx.voice_client.move_to(user_channel)
+
+        return await user_channel.connect()
 
     def play_next(self, error, voice, ctx):
         """
@@ -256,11 +253,10 @@ class Player(commands.Cog):
         """
         if error is not None:
             print(f"next play error: {error}")
-        try:
-            tracks_info = self.tracks[ctx.guild.id]
-        except KeyError:
-            return
 
+        tracks_info = self.tracks.get(ctx.guild.id)
+        if tracks_info is None:
+            return
         tracks, now_playing = tracks_info["tracks"], tracks_info["index"]
 
         if (new_index := now_playing + 1) > len(tracks) - 1:
@@ -283,20 +279,21 @@ class Player(commands.Cog):
         """
         Delete queue and player messages for guild
         """
-        try:
-            await self.queue_messages[guild_id]["message"].delete(delay=delay)
-            del self.queue_messages[guild_id]
-        except (NotFound, KeyError):
-            pass
-        try:
-            await self.player_messages[guild_id].delete(delay=delay)
-            del self.player_messages[guild_id]
-        except (NotFound, KeyError):
-            pass
+        current_queue_message = self.queue_messages.get(guild_id)
+        current_player_message = self.player_messages.get(guild_id)
+        for messages_container, message in [
+            (self.queue_messages, current_queue_message),
+            (self.player_messages, current_player_message),
+        ]:
+            if message is None:
+                continue
+
+            del messages_container[guild_id]
+            await message.delete(delay=delay)
 
     @commands.command(name="player")
     @commands.guild_only()
-    async def player_command(self, ctx: commands.Context):
+    async def player_command(self, ctx: commands.Context) -> None:
         """Вызов плеера для текущей гильдии"""
         if ctx.guild.id not in self.tracks:
             await self.nothing_is_playing_error(ctx)
@@ -306,15 +303,16 @@ class Player(commands.Cog):
         if ctx.guild.id in self.player_messages:
             await self.player_messages[ctx.guild.id].delete(delay=2)
         self.player_messages[ctx.guild.id] = player_message
-        emoji_list = ["🔀", "⏪", "▶", "⏩", "⏹", "🔁", "📑"]
-        for emoji in emoji_list:
-            await player_message.add_reaction(emoji)
+        for emoji in PLAYER_EMOJI:
+            try:
+                await player_message.add_reaction(emoji)
+            except NotFound:
+                return
 
     def _get_playlists_message(self, ctx):
         playlists = playlists_utils.get_single_guild_playlist(ctx.guild.id)
         desc = f"`Всего плейлистов: {len(playlists)}`"
         embed = embed_utils.create_music_embed(
-            # title=f"Плейлисты в вашей гильдии \"{ctx.guild.name}\"",
             title="Доступные плейлисты",
             description=desc,
         )
@@ -385,13 +383,13 @@ class Player(commands.Cog):
         """Команда для проигрывания треков и плейлистов
         Если команда написана без аргументов после, бот попытается востановить проигрывание"""
 
-        if (len(link) > 0) and "vk.com/" not in link[0]:
+        if link and VK_URL_PREFIX not in link[0]:
             await self.add_to_queue_command(ctx, *link, track=None)
             return
 
         voice = ctx.voice_client
 
-        if not voice and (len(link) == 0):
+        if not voice and not link:
             embed = embed_utils.create_error_embed(
                 message="Добавьте ссылку или имя трека к команде"
             )
@@ -402,11 +400,11 @@ class Player(commands.Cog):
         if not voice or not voice.is_connected():
             await self._join(ctx)
             voice = ctx.voice_client
-        elif (len(link) == 0) and not (voice.is_playing() or voice.is_paused()):
+        elif not link and not (voice.is_playing() or voice.is_paused()):
             await self.nothing_is_playing_error(ctx)
             return
 
-        elif (voice.is_playing() or voice.is_paused()) and (len(link) != 0):
+        elif (voice.is_playing() or voice.is_paused()) and link:
             del self.tracks[ctx.guild.id]
 
             await self.delete_messages(ctx.guild.id)
@@ -420,7 +418,7 @@ class Player(commands.Cog):
             return
 
         elif voice.is_playing():
-            if len(link) == 0:
+            if not link:
                 return
             await self._stop(voice, force=False)
 
