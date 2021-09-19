@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import traceback
 from random import shuffle
-from typing import Optional, Dict, Sequence, Union
+from typing import Optional, Sequence, Union
 
 import discord
 from discord import NotFound, Guild, Message, Embed
@@ -14,10 +14,8 @@ from .constants import PLAYER_EMOJI, VK_URL_PREFIX, QUEUE_EMOJI
 from ..utils import playlists_utils
 from ..utils import embed_utils
 from ..utils.custom_exceptions import (
-    NoTracksFound,
     NoVoiceClient,
     IncorrectVoiceChannel,
-    ToManyPlaylists,
     NoGuildPlaylists,
     PlaylistNotFound,
 )
@@ -386,17 +384,18 @@ class Player(commands.Cog):
 
     @commands.command(name="play", aliases=["p"])
     @commands.guild_only()
-    async def play_command(self, ctx: commands.Context, *link: Optional[str]) -> None:
-        """Команда для проигрывания треков и плейлистов
-        Если команда написана без аргументов после, бот попытается востановить проигрывание"""
+    async def play_command(self, ctx: commands.Context, *args: Optional[str]):
 
-        if link and VK_URL_PREFIX not in link[0]:
-            await self.add_to_queue_command(ctx, *link, track=None)
+        """Команда для проигрывания треков и плейлистов
+        Если команда написана без аргументов после, бот попытается востановить проигрывание(если оно на паузе)"""
+
+        if args and VK_URL_PREFIX not in args[0]:
+            await self.search_command(ctx, *args)
             return
 
         voice = ctx.voice_client
 
-        if not voice and not link:
+        if not voice and not args:
             embed = embed_utils.create_error_embed(
                 message="Добавьте ссылку или имя трека к команде"
             )
@@ -407,11 +406,11 @@ class Player(commands.Cog):
         if not voice or not voice.is_connected():
             await self._join(ctx)
             voice = ctx.voice_client
-        elif not link and not (voice.is_playing() or voice.is_paused()):
+        elif not args and not (voice.is_playing() or voice.is_paused()):
             await self.nothing_is_playing_error(ctx)
             return
 
-        elif (voice.is_playing() or voice.is_paused()) and link:
+        elif (voice.is_playing() or voice.is_paused()) and args:
             del self.tracks[ctx.guild.id]
 
             await self.delete_messages(ctx.guild.id)
@@ -425,11 +424,11 @@ class Player(commands.Cog):
             return
 
         elif voice.is_playing():
-            if not link:
+            if not args:
                 return
             await self._stop(voice, force=False)
 
-        link = link[0]
+        link = args[0]
         tracks = await vk_parsing.get_audio(link, requester=ctx.author.id)
         self.tracks[ctx.guild.id] = {"tracks": tracks, "index": 0}
 
@@ -513,7 +512,7 @@ class Player(commands.Cog):
         self, ctx: commands.Context, *, count: Optional[int] = 1
     ) -> None:
         """Пропустить один или несколько треков.
-        Чтобы пропустить несколько треков необходимо добавить число к команде"""
+        Чтобы пропустить несколько треков, необходимо добавить число к команде"""
         voice = ctx.voice_client
 
         # TODO: таких проверок полно надо чета с ними придумать
@@ -630,7 +629,7 @@ class Player(commands.Cog):
     @commands.command(name="delete", aliases=["remove", "d"], pass_context=True)
     @commands.guild_only()
     async def delete_command(self, ctx: commands.Context, index: int):
-        """Удалить трек под номером, который вы скажете боту, из очереди"""
+        """Удалить из очереди трек под номером, который вы скажете боту"""
         await ctx.message.add_reaction("💔")
         voice = ctx.voice_client
         tracks, now_playing = (
@@ -699,7 +698,7 @@ class Player(commands.Cog):
     @commands.command(name="leave", pass_context=True)
     @commands.guild_only()
     async def leave_command(self, ctx: commands.Context):
-        """Прогнать бота (останавливает прослушивание и очищает очередь)"""
+        """Прогнать бота из голосового канала(останавливает прослушивание и очищает очередь)"""
         await ctx.message.add_reaction("🚪")
 
         voice = ctx.voice_client
@@ -842,6 +841,7 @@ class Player(commands.Cog):
     @commands.command(name="del_playlist")
     @commands.guild_only()
     async def delete_playlist_command(self, ctx: commands.Context, *playlist_name):
+        """Удалить плейлист, имя которого вы укажите после этой команды"""
         if len(playlist_name) == 0:
             embed = embed_utils.create_error_embed(
                 message="Добавьте название плейлиста к этой команде для удаления"
