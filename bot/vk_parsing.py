@@ -71,14 +71,13 @@ async def get_audio(url: str, requester) -> list:
         method_name="audio.get", params=params
     )
     for item in response["response"]["items"]:
-
         track = get_track_info(item, requester)
         tracks.append(track)
     return tracks
 
 
 async def find_tracks_by_name(
-    requester: int, name: str, count: int = 1
+        requester: int, name: str, count: int = 1
 ) -> Optional[Union[dict, list]]:
     result = await api.get_context().api_request(
         method_name="audio.search", params={"q": name, "count": count}
