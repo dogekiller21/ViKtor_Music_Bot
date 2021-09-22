@@ -363,28 +363,12 @@ class Player(commands.Cog):
             await ctx.send(embed=embed)
             return
 
-        voice = ctx.voice_client
-        if voice is None:
-            await self._join(ctx)
-            voice = ctx.voice_client
-        if voice.is_playing() or voice.is_paused():
-            del self.tracks[ctx.guild.id]
-
-            await self.delete_messages(ctx.guild.id)
-
-            await self._stop(voice, force=False)
         tracks = playlists[name]["tracks"]
         id_list = []
         for track in tracks:
             id_list.append(track["id"])
         new_tracks = await vk_parsing.get_tracks_by_id(id_list)
-        self.tracks[ctx.guild.id] = {"tracks": new_tracks, "index": 0}
-
-        voice.play(
-            discord.FFmpegPCMAudio(source=new_tracks[0]["url"]),
-            after=lambda x: self.play_next(x, voice, ctx),
-        )
-        await self.player_command(ctx)
+        await self._add_tracks_to_queue(ctx=ctx, tracks=new_tracks)
 
     @commands.command(name="play", aliases=["p"])
     @commands.guild_only()
@@ -407,8 +391,6 @@ class Player(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
             return
 
-        if not voice or not voice.is_connected():
-            await self._join(ctx)
         if not args and not (voice.is_playing() or voice.is_paused()):
             await self.nothing_is_playing_error(ctx)
             return
@@ -575,9 +557,12 @@ class Player(commands.Cog):
         """
         Добавляем треки в очередь. Если там было пусто, запускаем первый
         """
+        voice = ctx.voice_client
+        if not voice or not voice.is_connected():
+            await self._join(ctx)
+            voice = ctx.voice_client
         if ctx.guild.id not in self.tracks:
             self.tracks[ctx.guild.id] = {"tracks": tracks, "index": 0}
-            voice = ctx.voice_client
             voice.play(
                 discord.FFmpegPCMAudio(source=tracks[0]["url"]),
                 after=lambda x: self.play_next(x, voice, ctx),
@@ -692,11 +677,6 @@ class Player(commands.Cog):
     async def search_command(self, ctx: commands.Context, *name: str):
         """Найти трек. Бот любезно предложит выбрать вам из 10ти(максимум) найденных треков один для проигрывания"""
         await ctx.message.add_reaction("🎧")
-        tracks = []
-
-        voice = ctx.voice_client
-        if not voice or not (voice.is_paused() or voice.is_playing()):
-            await self._join(ctx=ctx)
 
         tracks = await self._get_tracks_data_by_name(ctx=ctx, name=name, count=10)
         if tracks is None:
