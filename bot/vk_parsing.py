@@ -39,7 +39,7 @@ def optimize_link(link: str) -> dict:
 
 def get_thumb(track_info: dict):
     if "album" not in track_info or "thumb" not in track_info["album"]:
-        return "https://cdn.discordapp.com/attachments/248145752352620546/876452830049894451/MHUm5Vaje2M.png"
+        return "https://i.pinimg.com/originals/22/38/18/2238189ed157972bec6a29413f2c23ca.png"
     return track_info["album"]["thumb"]["photo_270"]
 
 

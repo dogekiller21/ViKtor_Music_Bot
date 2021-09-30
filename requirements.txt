@@ -4,18 +4,17 @@ attrs==20.3.0
 certifi==2020.12.5
 cffi==1.14.5
 chardet==4.0.0
-discord.py==1.6.0
+discord-py-interactions==3.0.2
+discord.py==1.7.3
 idna==2.10
 multidict==5.1.0
 pycparser==2.20
 pydantic==1.8.1
 PyNaCl==1.4.0
+python-dotenv==0.19.0
 requests==2.25.1
 six==1.15.0
 typing-extensions==3.7.4.3
 urllib3==1.26.4
 vkwave @ https://github.com/fscdev/vkwave/archive/master.zip
 yarl==1.6.3
-python-dotenv~=0.19.0
-
-vkwave~=0.2.10

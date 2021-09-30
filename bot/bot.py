@@ -1,6 +1,5 @@
-import json
-
 import discord
+from discord_slash import SlashCommand
 
 from . import functions
 from .config import TokenConfig, PathConfig
@@ -24,6 +23,7 @@ def get_prefix(_, message: discord.Message):
 intents = discord.Intents.all()
 intents.members = True
 client = commands.Bot(command_prefix=get_prefix, intents=intents)
+slash = SlashCommand(client, sync_commands=True, delete_from_unused_guilds=True)
 
 
 @client.event
@@ -35,9 +35,8 @@ async def on_ready():
 async def on_guild_join(guild):
     guild_id = guild.id
     owner_id = guild.owner_id
-    first_text_channel = guild.text_channels[0].id
     functions.save_new_guild(
-        guild_id=guild_id, owner_id=owner_id, welcome_channel=first_text_channel
+        guild_id=guild_id, owner_id=owner_id
     )
 
 

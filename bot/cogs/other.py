@@ -56,6 +56,10 @@ class Other(commands.Cog):
     @commands.command(name="help")
     async def help_command(self, ctx, *data):
         """Вызывает эту команду"""
+        embed = embed_utils.create_info_embed(
+            description="В разработке"
+        )
+        await ctx.send(embed=embed)
         prefix = get_prefix(self.client, ctx.message)
 
         if not data:

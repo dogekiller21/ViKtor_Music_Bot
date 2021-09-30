@@ -14,8 +14,6 @@ from bot.utils.file_utils import PlayListsFile, update_json
 def save_new_playlist(
     guild_id: int, playlist: list, json_data: JSON_DATA, name: Optional[str] = None
 ) -> Optional[str]:
-    # playlist_1 = copy.deepcopy(playlist)
-    # [item.pop("requester", 0) for item in playlist_1]
     new_playlist = [{"id": track["id"]} for track in playlist]
 
     guild_id = str(guild_id)
