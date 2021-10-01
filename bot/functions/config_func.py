@@ -1,7 +1,6 @@
 from typing import Union
 
 from bot._types import JSON_DATA
-from bot.config import PathConfig
 from bot.utils.file_utils import update_json, ConfigFile
 
 

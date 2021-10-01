@@ -33,8 +33,7 @@ def optimize_link(link: str) -> dict:
             "playlist_id": int(playlist_id),
             "access_key": access_key,
         }
-    else:
-        return {"owner_id": int(owner_id), "playlist_id": int(playlist_id)}
+    return {"owner_id": int(owner_id), "playlist_id": int(playlist_id)}
 
 
 def get_thumb(track_info: dict):

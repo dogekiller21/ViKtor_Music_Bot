@@ -12,6 +12,5 @@ class TokenConfig:
 
 
 class PathConfig:
-    PREFIXES = "bot/prefixes.json"
     PLAYLISTS = "bot/playlists.json"
     CONFIG = "bot/config.json"

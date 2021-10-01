@@ -31,6 +31,5 @@ def update_json(file: JsonFile):
     return decorator
 
 
-PrefixesFile = JsonFile(PathConfig.PREFIXES)
 PlayListsFile = JsonFile(PathConfig.PLAYLISTS)
 ConfigFile = JsonFile(PathConfig.CONFIG)

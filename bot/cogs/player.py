@@ -161,12 +161,12 @@ class Player(commands.Cog):
             else:
                 tracks_to_str[-1] += "\n↑ сейчас играет ↑"
 
-        if len(tracks) > 10:
-            pages = f"Страница: {page} / {pages}"
-
         embed = embed_utils.create_music_embed(
-            description="\n\n".join(tracks_to_str), footer=pages
+            description="\n\n".join(tracks_to_str)
         )
+        if len(tracks) > 10:
+            embed.set_footer(text=f"Страница: {page} / {pages}")
+
         return embed
 
     def _check_queue_msg(self, guild_id: int) -> bool:
@@ -475,6 +475,11 @@ class Player(commands.Cog):
             return
         voice.pause()
         await self.update_messages(ctx)
+        if not ctx.author.bot:
+            embed = embed_utils.create_music_embed(
+                description="Пауза"
+            )
+            await ctx.send(embed=embed, delete_after=5)
 
     @cog_ext.cog_slash(
         name="resume",
@@ -487,6 +492,11 @@ class Player(commands.Cog):
         if voice.is_paused():
             voice.resume()
         await self.update_messages(ctx)
+        if not ctx.author.bot:
+            embed = embed_utils.create_music_embed(
+                description="Продолжаем слушать"
+            )
+            await ctx.send(embed=embed, delete_after=5)
 
     @cog_ext.cog_slash(
         name="stop",
@@ -502,8 +512,12 @@ class Player(commands.Cog):
         if voice.is_connected():
             del self.tracks[ctx.guild.id]
             await self.delete_messages(ctx.guild.id)
-
             await self._stop(voice)
+        if not ctx.author.bot:
+            embed = embed_utils.create_music_embed(
+                description="Останавливаю прослушивание"
+            )
+            await ctx.send(embed=embed, delete_after=5)
 
     @cog_ext.cog_slash(
         name="queue",
@@ -545,16 +559,22 @@ class Player(commands.Cog):
         if not await check_self_voice(ctx):
             return
         voice = ctx.voice_client
-        if voice.is_playing() or voice.is_paused():
-            tracks = self.tracks[ctx.guild.id]["tracks"]
-            if len(tracks) == 1:
-                return
-            shuffle(tracks)
-            self.tracks[ctx.guild.id] = {"tracks": tracks, "index": -1}
-            if self.queue_messages.get(ctx.guild.id) is not None:
-                self.queue_messages[ctx.guild.id]["page"] = 1
+        if not (voice.is_playing() or voice.is_paused()):
+            return
+        tracks = self.tracks[ctx.guild.id]["tracks"]
+        if len(tracks) == 1:
+            return
+        shuffle(tracks)
+        self.tracks[ctx.guild.id] = {"tracks": tracks, "index": -1}
+        if self.queue_messages.get(ctx.guild.id) is not None:
+            self.queue_messages[ctx.guild.id]["page"] = 1
 
-            await self._stop(voice, force=False)
+        await self._stop(voice, force=False)
+        if not ctx.author.bot:
+            embed = embed_utils.create_music_embed(
+                description="Очередь перемешана"
+            )
+            await ctx.send(embed=embed, delete_after=5)
 
     @cog_ext.cog_slash(
         name="next",
@@ -587,6 +607,8 @@ class Player(commands.Cog):
         if new_index is not None:
             self.tracks[ctx.guild.id]["index"] = new_index - 1
             await self._stop(voice, force=False)
+
+        # TODO заставить все команды отвечать хотя бы одно сообщение
 
     @cog_ext.cog_slash(
         name="prev",
@@ -977,7 +999,7 @@ class Player(commands.Cog):
         if reaction.message.guild.id in self.player_messages:
             if reaction.message.id == self.player_messages[ctx.guild.id].id:
                 if reaction.emoji == "⏪":
-                    return await self.prev_command(ctx)
+                    return await self.prev_command.invoke(ctx)
 
                 if reaction.emoji == "▶":
                     voice = ctx.voice_client

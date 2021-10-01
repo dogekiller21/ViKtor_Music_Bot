@@ -3,7 +3,6 @@ from typing import Optional
 
 from bot._types import JSON_DATA
 from bot.utils.custom_exceptions import (
-    ToManyPlaylists,
     NoGuildPlaylists,
     PlaylistNotFound,
 )
@@ -14,12 +13,13 @@ from bot.utils.file_utils import PlayListsFile, update_json
 def save_new_playlist(
     guild_id: int, playlist: list, json_data: JSON_DATA, name: Optional[str] = None
 ) -> Optional[str]:
-    new_playlist = [{"id": track["id"]} for track in playlist]
-
     guild_id = str(guild_id)
     guild_playlists = json_data[guild_id] if guild_id in json_data else {}
 
     length = len(guild_playlists)
+
+    new_playlist = [{"id": track["id"]} for track in playlist]
+
     if length >= 10:
         return None
     if name is None:

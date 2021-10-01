@@ -2,27 +2,14 @@ import discord
 from discord_slash import SlashCommand
 
 from . import functions
-from .config import TokenConfig, PathConfig
+from .config import TokenConfig
 from discord.ext import commands
 
 import os
 
-from .utils.file_utils import PrefixesFile
-
-DEFAULT_PREFIX = "-"
-
-
-def get_prefix(_, message: discord.Message):
-    prefixes_data = PrefixesFile.get()
-    current_prefix = prefixes_data.get(str(message.guild.id))
-    if current_prefix is None:
-        return DEFAULT_PREFIX
-    return current_prefix
-
 
 intents = discord.Intents.all()
-intents.members = True
-client = commands.Bot(command_prefix=get_prefix, intents=intents)
+client = commands.Bot(command_prefix="", intents=intents, self_bot=True)
 slash = SlashCommand(client, sync_commands=True, delete_from_unused_guilds=True)
 
 
