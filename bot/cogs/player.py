@@ -1,18 +1,15 @@
 import asyncio
-import datetime
 from random import shuffle
-from typing import Optional, Sequence, Union
+from typing import Optional, Union
 
 import discord
-from discord import NotFound, Guild, Message, Embed
 
 from discord.ext import commands
 from discord_slash import cog_ext, SlashContext
 
 from bot import vk_parsing, functions
 from .constants import PLAYER_EMOJI, VK_URL_PREFIX, QUEUE_EMOJI
-from ..utils import playlists_utils
-from ..utils import embed_utils
+from ..utils import playlists_utils, embed_utils, player_msg_utils
 from ..utils.checks import check_user_voice, check_self_voice
 from ..utils.custom_exceptions import (
     NoGuildPlaylists,
@@ -26,8 +23,8 @@ class Player(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.tracks: dict[int, dict] = {}
-        self.queue_messages: dict[int, dict[str, Union[int, Message]]] = dict()
-        self.player_messages: dict[int, Message] = dict()
+        self.queue_messages: dict[int, dict[str, Union[int, discord.Message]]] = dict()
+        self.player_messages: dict[int, discord.Message] = dict()
         self.loop = self.client.loop
 
     async def nothing_is_playing_error(self, ctx: commands.Context):
@@ -53,13 +50,6 @@ class Player(commands.Cog):
                 page = self.queue_messages[guild_id]["page"]
         return page, pages
 
-    def _get_duration(self, duration: int) -> str:
-        date = datetime.datetime.fromordinal(1) + datetime.timedelta(seconds=duration)
-        duration = date.strftime("%M:%S")
-        if date.hour != 0:
-            duration = date.strftime("%H:") + duration
-        return duration
-
     def get_requester(self, track: dict):
         requester = track.get("requester")
         if requester is None:
@@ -72,7 +62,7 @@ class Player(commands.Cog):
             "icon_url": "https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png",
         }
 
-    def create_player_embed(self, ctx: commands.Context) -> Optional[Embed]:
+    def create_player_embed(self, ctx: commands.Context) -> Optional[discord.Embed]:
         current_tracks = self.tracks.get(ctx.guild.id)
         if current_tracks is None:
             return
@@ -85,13 +75,13 @@ class Player(commands.Cog):
         embed = embed_utils.create_music_embed(
             title=f'Плеер в канале "{ctx.voice_client.channel.name}"',
             description=f"`Треков в очереди: {length}`\n"
-                        f"{self._get_loop_str_min(ctx.guild)}",
+                        f"{player_msg_utils.get_loop_str_min(ctx.guild)}",
         )
         requester = self.get_requester(tracks[now_playing])
         if requester is not None:
             embed.set_footer(**requester)
         if prev_index >= 0:
-            duration = self._get_duration(tracks[prev_index]["duration"])
+            duration = player_msg_utils.get_duration(tracks[prev_index]["duration"])
             embed.add_field(
                 name="Предыдущий трек",
                 value=f"**{prev_index + 1}. {tracks[prev_index]['name']}** {duration}\n",
@@ -101,7 +91,7 @@ class Player(commands.Cog):
         voice = ctx.voice_client
         title = "⟶ Приостановлен ⟵" if voice.is_paused() else "⟶ Сейчас играет ⟵"
 
-        duration = self._get_duration(tracks[now_playing]["duration"])
+        duration = player_msg_utils.get_duration(tracks[now_playing]["duration"])
         embed.add_field(
             name=title,
             value=f"**{now_playing + 1}. {tracks[now_playing]['name']}** {duration}",
@@ -109,7 +99,7 @@ class Player(commands.Cog):
         )
 
         if next_index < len(tracks):
-            duration = self._get_duration(tracks[next_index]["duration"])
+            duration = player_msg_utils.get_duration(tracks[next_index]["duration"])
             embed.add_field(
                 name="Следующий трек",
                 value=f"\n**{next_index + 1}. {tracks[next_index]['name']}** {duration}",
@@ -118,14 +108,6 @@ class Player(commands.Cog):
 
         embed.set_thumbnail(url=tracks[now_playing]["thumb"])
         return embed
-
-    # Loop settings in string format for embed footer
-    def _get_loop_str_min(self, guild: Guild):
-        loop_settings = functions.get_guild_data(guild, "loop_queue")
-        cliche = "Зацикливание **{}**"
-        if loop_settings:
-            return cliche.format("вкл")
-        return cliche.format("выкл")
 
     # Queue embed
     def create_queue_embed(
@@ -150,7 +132,7 @@ class Player(commands.Cog):
         tracks_to_str = []
         for i, track in enumerate(tracks[page_index:page_index + 10]):
 
-            duration = self._get_duration(track["duration"])
+            duration = player_msg_utils.get_duration(track["duration"])
             track_index = i + page_index
             tracks_to_str.append(f"**{track_index + 1}. {track['name']}** {duration}")
             if track_index != now_playing:
@@ -184,13 +166,14 @@ class Player(commands.Cog):
         page, _ = self.get_page_counter(ctx.guild.id)
         if page != (now_page := self.queue_messages[ctx.guild.id]["page"]):
             now_page = None
+        # TODO ебанутые 3 строчки сверху нужно пересмотреть и понять зачем они нужны
         embed = self.create_queue_embed(ctx, page=now_page)
         if embed is None:
             return
 
         try:
             await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
-        except NotFound:
+        except discord.NotFound:
             return
 
     async def player_message_update(self, ctx) -> None:
@@ -202,7 +185,7 @@ class Player(commands.Cog):
             return
         try:
             await self.player_messages[ctx.guild.id].edit(embed=embed)
-        except NotFound:
+        except discord.NotFound:
             return
 
     async def update_messages(self, ctx) -> None:
@@ -251,9 +234,11 @@ class Player(commands.Cog):
         """
         user_channel = ctx.author.voice.channel
         if ctx.voice_client:
-            return await ctx.voice_client.move_to(user_channel)
+            await ctx.voice_client.move_to(user_channel)
+            return ctx.voice_client
 
-        return await user_channel.connect()
+        await user_channel.connect()
+        return ctx.voice_client
 
     def play_next(self, error, voice, ctx):
         """
@@ -299,35 +284,6 @@ class Player(commands.Cog):
             del messages_container[guild_id]
             await message.delete(delay=delay)
 
-    async def _add_reactions(self, emojis: Sequence[str], message: Message) -> None:
-        for emoji in emojis:
-            try:
-                await message.add_reaction(emoji)
-            except NotFound:
-                return
-
-    def _get_playlists_message(self, ctx):
-        playlists = playlists_utils.get_single_guild_playlist(ctx.guild.id)
-        desc = f"`Всего плейлистов: {len(playlists)}`"
-        embed = embed_utils.create_music_embed(
-            title="Доступные плейлисты",
-            description=desc,
-        )
-        for key in playlists:
-            playlist = playlists[key]
-            date = datetime.date.fromordinal(playlist["date"])
-            date = date.strftime("%d-%m-%Y")
-            embed.add_field(
-                name=f"{key}",
-                value=f"`Треков: {len(playlist['tracks'])}`\n"
-                      f"`Дата создания: {date}`",
-                inline=False,
-            )
-        embed.set_footer(
-            text="Используйте эту команду с названием плейлиста для проигрывания"
-        )
-        return embed
-
     @cog_ext.cog_slash(
         name="player",
         description="Вызов плеера для текущей гильдии"
@@ -342,7 +298,7 @@ class Player(commands.Cog):
         if ctx.guild.id in self.player_messages:
             await self.player_messages[ctx.guild.id].delete(delay=2)
         self.player_messages[ctx.guild.id] = player_message
-        await self._add_reactions(emojis=PLAYER_EMOJI, message=player_message)
+        await player_msg_utils.add_reactions(emojis=PLAYER_EMOJI, message=player_message)
 
     @cog_ext.cog_slash(
         name="playlist",
@@ -366,7 +322,7 @@ class Player(commands.Cog):
             await ctx.send(embed=embed)
             return
         if playlist_name is None:
-            embed = self._get_playlists_message(ctx)
+            embed = playlists_utils.get_playlists_message(ctx)
             await ctx.send(embed=embed)
             return
         if playlist_name not in playlists:
@@ -426,7 +382,7 @@ class Player(commands.Cog):
             return
         tracks_str_list = []
         for i, track in enumerate(tracks):
-            duration = self._get_duration(track["duration"])
+            duration = player_msg_utils.get_duration(track["duration"])
             tracks_str_list.append(f"**{i + 1}. {track['name']}** {duration}")
         description = "\n".join(tracks_str_list)
         embed = embed_utils.create_music_embed(
@@ -448,6 +404,7 @@ class Player(commands.Cog):
 
         try:
             msg = await self.client.wait_for("message", check=check, timeout=30)
+
         except asyncio.TimeoutError:
             pass
         else:
@@ -548,7 +505,7 @@ class Player(commands.Cog):
             await self.queue_messages[ctx.guild.id]["message"].delete(delay=2)
 
         self.queue_messages[ctx.guild.id] = {"message": queue_message, "page": page}
-        await self._add_reactions(emojis=QUEUE_EMOJI, message=queue_message)
+        await player_msg_utils.add_reactions(emojis=QUEUE_EMOJI, message=queue_message)
 
     @cog_ext.cog_slash(
         name="shuffle",
@@ -563,6 +520,11 @@ class Player(commands.Cog):
             return
         tracks = self.tracks[ctx.guild.id]["tracks"]
         if len(tracks) == 1:
+            if not ctx.author.bot:
+                embed = embed_utils.create_music_embed(
+                    description="Зачем перемешивать очередь из одного трека?🤔"
+                )
+                await ctx.send(embed=embed)
             return
         shuffle(tracks)
         self.tracks[ctx.guild.id] = {"tracks": tracks, "index": -1}
@@ -575,6 +537,16 @@ class Player(commands.Cog):
                 description="Очередь перемешана"
             )
             await ctx.send(embed=embed, delete_after=5)
+
+    async def _skipped_tracks_msg(self, ctx, track, index):
+        if ctx.author.bot:
+            return
+        requester = self.client.get_user(track["requester"])
+        description = f"Трек пропущен: **{index + 1}. {track['name']}**"
+        if requester is not None:
+            description += f" ({requester.mention})"
+        embed = embed_utils.create_music_embed(description=description)
+        await ctx.send(embed=embed)
 
     @cog_ext.cog_slash(
         name="next",
@@ -597,9 +569,10 @@ class Player(commands.Cog):
         if ctx.guild.id not in self.tracks:
             return
 
-        tracks_info = self.tracks[ctx.guild.id]
-
-        tracks, index = tracks_info["tracks"], tracks_info["index"]
+        tracks, index = (
+            self.tracks[ctx.guild.id]["tracks"],
+            self.tracks[ctx.guild.id]["index"],
+        )
         if (new_index := index + count) > len(tracks) - 1:
             new_index = await self.queue_index_overflow(
                 ctx=ctx, voice_client=voice, default=0
@@ -607,6 +580,8 @@ class Player(commands.Cog):
         if new_index is not None:
             self.tracks[ctx.guild.id]["index"] = new_index - 1
             await self._stop(voice, force=False)
+
+        await self._skipped_tracks_msg(ctx, tracks[index], index)
 
         # TODO заставить все команды отвечать хотя бы одно сообщение
 
@@ -624,12 +599,9 @@ class Player(commands.Cog):
     ) -> None:
         """Вернуться на один или несколько треков назад.
         Про количество смотрите в команде **next**"""
-        if not await check_self_voice(ctx):
+        if (not await check_self_voice(ctx)) or (ctx.guild.id not in self.tracks):
             return
-
         voice = ctx.voice_client
-        if ctx.guild.id not in self.tracks:
-            return
 
         tracks, index = (
             self.tracks[ctx.guild.id]["tracks"],
@@ -643,17 +615,19 @@ class Player(commands.Cog):
             self.tracks[ctx.guild.id]["index"] = new_index - 1
             await self._stop(voice, force=False)
 
+        await self._skipped_tracks_msg(ctx, tracks[index], index)
+
     async def _get_tracks_data_by_name(
             self, ctx: Union[commands.Context, SlashContext],
             name: str,
             count: int = 1
-    ) -> Optional[Union[dict, list[dict]]]:
+    ) -> Optional[list[dict]]:
         """
         шлем ошибку или возвращаем трек(и)
         """
 
         try:
-            track = await vk_parsing.find_tracks_by_name(
+            tracks = await vk_parsing.find_tracks_by_name(
                 requester=ctx.author.id, name=name, count=count
             )
         except Exception as err:
@@ -664,14 +638,14 @@ class Player(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
             return
 
-        if track is None:
+        if tracks is None:
             embed = embed_utils.create_error_embed(
                 message=f"Не найдено треков по вашему запросу: **{name}**"
             )
             await ctx.send(embed=embed, delete_after=5)
             return
 
-        return track
+        return tracks
 
     async def _add_tracks_to_queue(
             self, ctx: Union[commands.Context, SlashContext], tracks: list[dict]
@@ -681,8 +655,7 @@ class Player(commands.Cog):
         """
         voice = ctx.voice_client
         if not voice or not voice.is_connected():
-            await self._join(ctx)
-            voice = ctx.voice_client
+            voice = await self._join(ctx)
         if ctx.guild.id not in self.tracks:
             self.tracks[ctx.guild.id] = {"tracks": tracks, "index": 0}
             voice.play(

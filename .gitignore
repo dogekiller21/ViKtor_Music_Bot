@@ -1,8 +1,7 @@
 .idea
 *.mp3
-bot/config.json
-bot/playlists.json
-bot/prefixes.json
+bot/storage/config.json
+bot/storage/playlists.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

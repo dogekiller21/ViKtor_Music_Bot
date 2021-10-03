@@ -12,5 +12,5 @@ class TokenConfig:
 
 
 class PathConfig:
-    PLAYLISTS = "bot/playlists.json"
-    CONFIG = "bot/config.json"
+    PLAYLISTS = "bot/storage/playlists.json"
+    CONFIG = "bot/storage/config.json"

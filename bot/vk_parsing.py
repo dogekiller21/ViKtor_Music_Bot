@@ -1,4 +1,4 @@
-from typing import Union, Optional
+from typing import Optional
 
 from .config import TokenConfig
 from vkwave.api import API
@@ -77,17 +77,13 @@ async def get_audio(url: str, requester) -> list:
 
 async def find_tracks_by_name(
         requester: int, name: str, count: int = 1
-) -> Optional[Union[dict, list]]:
+) -> Optional[list]:
     result = await api.get_context().api_request(
         method_name="audio.search", params={"q": name, "count": count}
     )
-    items = result["response"]["items"]
-    if not items:
-        return None
-    if count == 1:
-        item = items[0]
-
-        return get_track_info(item, requester)
+    items = result["response"].get("items")
+    if items is None:
+        return
 
     return [get_track_info(item, requester) for item in items[:count]]
 

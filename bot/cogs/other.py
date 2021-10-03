@@ -1,9 +1,13 @@
+from typing import Optional
+
 import discord
 from discord.ext import commands
 from discord.ext.commands import CommandError
+from discord_slash import cog_ext
 
 from bot.utils import embed_utils
-from .constants import GREEN_COLOR, TURQUOISE_COLOR, BROWN_COLOR
+from .constants import CustomColors
+from ..bot import slash
 
 
 class Other(commands.Cog):
@@ -11,25 +15,31 @@ class Other(commands.Cog):
 
     def __init__(self, client):
         self.client = client
-        self.normal_color = GREEN_COLOR
-        self.error_color = BROWN_COLOR
-        self.bug_color = TURQUOISE_COLOR
+        self.normal_color = CustomColors.GREEN_COLOR
+        self.error_color = CustomColors.BROWN_COLOR
 
-    @commands.command(name="help")
-    async def help_command(self, ctx, *data):
+    @cog_ext.cog_slash(
+        name="help",
+        description="Узнать все доступные команды",
+        options=[{
+            "name": "module_name",
+            "description": "Имя модуля",
+            "type": 3
+        }]
+    )
+    async def help_command(self, ctx, module_name: Optional[str] = None):
         """Вызывает эту команду"""
         embed = embed_utils.create_info_embed(
             description="В разработке"
         )
         await ctx.send(embed=embed)
-
-        if not data:
+        return
+        if module_name is None:
             embed = discord.Embed(
                 title="Команды и модули",
                 description=f"Используйте /help <модуль>, чтобы получить подробную информацию\n",
                 color=self.normal_color,
             )
-
             cogs_desc = ""
             for cog in self.client.cogs:
                 passed = 0
@@ -55,9 +65,9 @@ class Other(commands.Cog):
                     name="Не относящиеся к модулю", value=commands_desc, inline=False
                 )
 
-        elif len(data) == 1:
+        elif module_name is not None:
             for cog in self.client.cogs:
-                if cog.lower() != data[0].lower():
+                if cog.lower() != module_name.lower():
                     continue
 
                 embed = discord.Embed(
@@ -87,26 +97,11 @@ class Other(commands.Cog):
             else:
                 embed = discord.Embed(
                     title="Что это?",
-                    description=f"Никогда не слышал о модуле `{data[0]}`",
+                    description=f"Никогда не слышал о модуле `{module_name}`",
                     color=self.error_color,
                 )
             embed.set_footer(
                 text=ctx.author.display_name, icon_url=ctx.author.avatar_url
-            )
-
-        elif len(data) > 1:
-            embed = discord.Embed(
-                title="Многовато",
-                description="Пожалуйста, вводите только один модуль за раз",
-                color=self.error_color,
-            )
-
-        else:
-            embed = discord.Embed(
-                title="",
-                description="Кажется, вы обнаружили баг.\n"
-                "Пожалуйста, сообщите об этом мне dogekiller21#6067",
-                color=self.bug_color,
             )
 
         await ctx.send(embed=embed)

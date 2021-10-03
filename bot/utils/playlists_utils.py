@@ -2,6 +2,7 @@ import datetime
 from typing import Optional
 
 from bot._types import JSON_DATA
+from bot.utils import embed_utils
 from bot.utils.custom_exceptions import (
     NoGuildPlaylists,
     PlaylistNotFound,
@@ -62,3 +63,26 @@ def delete_playlist(guild_id: int, playlist_name: str, json_data: JSON_DATA):
     else:
         del guild_playlists[playlist_name]
         json_data[str(guild_id)] = guild_playlists
+
+
+def get_playlists_message(ctx):
+    playlists = get_single_guild_playlist(ctx.guild.id)
+    desc = f"`Всего плейлистов: {len(playlists)}`"
+    embed = embed_utils.create_music_embed(
+        title="Доступные плейлисты",
+        description=desc,
+    )
+    for key in playlists:
+        playlist = playlists[key]
+        date = datetime.date.fromordinal(playlist["date"])
+        date = date.strftime("%d-%m-%Y")
+        embed.add_field(
+            name=f"{key}",
+            value=f"`Треков: {len(playlist['tracks'])}`\n"
+                  f"`Дата создания: {date}`",
+            inline=False,
+        )
+    embed.set_footer(
+        text="Используйте эту команду с названием плейлиста для проигрывания"
+    )
+    return embed
