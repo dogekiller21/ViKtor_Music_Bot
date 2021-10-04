@@ -792,19 +792,18 @@ class Player(commands.Cog):
             "type": 3
         }]
     )
-    async def save_playlist_command(self, ctx: commands.Context, name: Optional[str] = None):
+    async def save_playlist_command(self, ctx: commands.Context, playlist_name: Optional[str] = None):
         """Сохранить текущий плейлист"""
         if ctx.guild.id not in self.tracks:
             embed = embed_utils.create_error_embed(message="Нет треков в очереди")
             await ctx.send(embed=embed)
             return
         playlist = self.tracks[ctx.guild.id]["tracks"]
-        current_name = None
-        if name is not None:
-            current_name = name.strip()
+        if playlist_name is not None:
+            playlist_name = playlist_name.strip()
 
         playlist_name = playlists_utils.save_new_playlist(
-            ctx.guild.id, playlist, name=current_name
+            ctx.guild.id, playlist, name=playlist_name
         )
         if playlist_name is None:
             embed = embed_utils.create_error_embed(
@@ -971,6 +970,8 @@ class Player(commands.Cog):
         ctx = await client.get_context(reaction.message)
         if reaction.message.guild.id in self.player_messages:
             if reaction.message.id == self.player_messages[ctx.guild.id].id:
+                if reaction.emoji not in PLAYER_EMOJI:
+                    return
                 if reaction.emoji == "⏪":
                     return await self.prev_command.invoke(ctx)
 
@@ -1002,6 +1003,8 @@ class Player(commands.Cog):
         if reaction.message.guild.id in self.queue_messages:
 
             if reaction.message.id == self.queue_messages[ctx.guild.id]["message"].id:
+                if reaction.emoji not in QUEUE_EMOJI:
+                    return
                 if reaction.emoji == "⬅":
                     page, pages = self.get_page_counter(ctx.guild.id)
                     if page <= 1:

@@ -9,7 +9,7 @@ import os
 
 
 intents = discord.Intents.all()
-client = commands.Bot(command_prefix="", intents=intents, self_bot=True)
+client = commands.Bot(command_prefix="", intents=intents, self_bot=True, help_command=False)
 slash = SlashCommand(client, sync_commands=True, delete_from_unused_guilds=True)
 
 
@@ -30,7 +30,6 @@ async def on_guild_join(guild):
 def run():
     cogs_path = "bot{delimiter}cogs"
 
-    client.remove_command("help")
     for filename in os.listdir(cogs_path.format(delimiter="/")):
         if filename in ["__init__.py", "constants.py"]:
             continue
