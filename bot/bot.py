@@ -9,7 +9,7 @@ import os
 
 
 intents = discord.Intents.all()
-client = commands.Bot(command_prefix="", intents=intents, self_bot=True, help_command=False)
+client = commands.Bot(command_prefix="", intents=intents, self_bot=True, help_command=None)
 slash = SlashCommand(client, sync_commands=True, delete_from_unused_guilds=True)
 
 

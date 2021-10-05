@@ -3,12 +3,16 @@ from random import shuffle
 from typing import Optional, Union
 
 import discord
+from discord import NotFound
 
 from discord.ext import commands
-from discord_slash import cog_ext, SlashContext
+from discord_slash import cog_ext, SlashContext, ComponentContext
+from discord_slash.utils.manage_components import create_select_option, create_select, create_actionrow, \
+    wait_for_component
 
 from bot import vk_parsing, functions
-from .constants import PLAYER_EMOJI, VK_URL_PREFIX, QUEUE_EMOJI
+from .constants import VK_URL_PREFIX, QUEUE_EMOJI, FFMPEG_OPTIONS
+from ..events.components_events import player_components
 from ..utils import playlists_utils, embed_utils, player_msg_utils
 from ..utils.checks import check_user_voice, check_self_voice
 from ..utils.custom_exceptions import (
@@ -233,7 +237,7 @@ class Player(commands.Cog):
         Func for joining user's channel
         """
         user_channel = ctx.author.voice.channel
-        if ctx.voice_client:
+        if ctx.voice_client is not None:
             await ctx.voice_client.move_to(user_channel)
             return ctx.voice_client
 
@@ -259,8 +263,12 @@ class Player(commands.Cog):
             ).result()
         if new_index is None:
             return
+        source = asyncio.run_coroutine_threadsafe(discord.FFmpegOpusAudio.from_probe(
+            source=tracks[new_index]["url"],
+            **FFMPEG_OPTIONS
+        ), self.loop).result()
         voice.play(
-            discord.FFmpegPCMAudio(source=tracks[new_index]["url"]),
+            source=source,
             after=lambda err: self.play_next(err, voice, ctx),
         )
         self.tracks[ctx.guild.id]["index"] = new_index
@@ -286,19 +294,18 @@ class Player(commands.Cog):
 
     @cog_ext.cog_slash(
         name="player",
-        description="Вызов плеера для текущей гильдии"
+        description="Вызов плеера для текущей гильдии",
     )
-    async def player_command(self, ctx: commands.Context) -> None:
+    async def player_command(self, ctx: Union[SlashContext, commands.Context]) -> None:
         """Вызов плеера для текущей гильдии"""
         if ctx.guild.id not in self.tracks:
             await self.nothing_is_playing_error(ctx)
             return
         embed = self.create_player_embed(ctx)
-        player_message = await ctx.send(embed=embed)
+        player_message = await ctx.send(embed=embed, components=player_components)
         if ctx.guild.id in self.player_messages:
             await self.player_messages[ctx.guild.id].delete(delay=2)
         self.player_messages[ctx.guild.id] = player_message
-        await player_msg_utils.add_reactions(emojis=PLAYER_EMOJI, message=player_message)
 
     @cog_ext.cog_slash(
         name="playlist",
@@ -380,50 +387,42 @@ class Player(commands.Cog):
         tracks = await self._get_tracks_data_by_name(ctx=ctx, name=request, count=10)
         if tracks is None:
             return
-        tracks_str_list = []
+
+        tracks_options = []
         for i, track in enumerate(tracks):
             duration = player_msg_utils.get_duration(track["duration"])
-            tracks_str_list.append(f"**{i + 1}. {track['name']}** {duration}")
-        description = "\n".join(tracks_str_list)
-        embed = embed_utils.create_music_embed(
-            description=description,
-            footer=f"Напишите индекс трека для добавление в очередь\n"
-                   f"!c для отмены",
-        )
-        message = await ctx.send(embed=embed)
 
-        def check(m):
-            return (
-                    m.author == ctx.author
-                    and m.channel.id == ctx.channel_id
-                    and (
-                            (m.content.isdigit() and int(m.content) <= len(tracks))
-                            or m.content == "!c"
-                    )
+            tracks_options.append(
+                create_select_option(label=f"{track['name']}",
+                                     description=f"{track['name']} ({duration})",
+                                     value=str(i))
             )
 
-        try:
-            msg = await self.client.wait_for("message", check=check, timeout=30)
+        tracks_select = create_select(
+            options=tracks_options,
+            placeholder="Выберите трек для добавления в очередь",
+            min_values=1
+        )
+        tracks_component = create_actionrow(tracks_select)
+        message = await ctx.send("Выберите трек для добавления в очередь", components=[tracks_component])
+        tracks_ctx: ComponentContext = await wait_for_component(self.client, components=tracks_component)
+        selected_value = int(tracks_ctx.selected_options[0])
+        selected_track = tracks[selected_value]
 
-        except asyncio.TimeoutError:
+        tracks_select["options"][selected_value]["default"] = True
+        tracks_select["disabled"] = True
+        new_tracks_component = create_actionrow(tracks_select)
+        try:
+            await message.edit(components=[new_tracks_component])
+        except NotFound:
             pass
-        else:
-            if msg.content == "!c":
-                await ctx.send(
-                    embed=embed_utils.create_info_embed(description="Отменяем"),
-                    delete_after=5,
-                )
-                return
-            track = [tracks[int(msg.content) - 1], ]
-            await self._add_tracks_to_queue(ctx, tracks=track)
-        finally:
-            await message.delete(delay=5)
+        await self._add_tracks_to_queue(ctx, tracks=[selected_track])
 
     @cog_ext.cog_slash(
         name="pause",
         description="Приостановить проигрывание"
     )
-    async def pause_command(self, ctx: commands.Context) -> None:
+    async def pause_command(self, ctx) -> None:
         """Приостановить проигрывание"""
         if not await check_self_voice(ctx):
             return
@@ -432,11 +431,11 @@ class Player(commands.Cog):
             return
         voice.pause()
         await self.update_messages(ctx)
-        if not ctx.author.bot:
+        if not isinstance(ctx, ComponentContext):
             embed = embed_utils.create_music_embed(
                 description="Пауза"
             )
-            await ctx.send(embed=embed, delete_after=5)
+            await ctx.send(embed=embed)
 
     @cog_ext.cog_slash(
         name="resume",
@@ -449,17 +448,17 @@ class Player(commands.Cog):
         if voice.is_paused():
             voice.resume()
         await self.update_messages(ctx)
-        if not ctx.author.bot:
+        if not isinstance(ctx, ComponentContext):
             embed = embed_utils.create_music_embed(
                 description="Продолжаем слушать"
             )
-            await ctx.send(embed=embed, delete_after=5)
+            await ctx.send(embed=embed, delete_after=5, hidden=True)
 
     @cog_ext.cog_slash(
         name="stop",
         description="Полностью останавить проигрывание"
     )
-    async def stop_command(self, ctx: commands.Context) -> None:
+    async def stop_command(self, ctx) -> None:
         """Полностью останавливает проигрывание треков в гильдии, очищает очередь.
         Если бот не будет проигрывать ничего в течении 2х минут, он обидится и уйдет"""
         if not await check_self_voice(ctx):
@@ -470,11 +469,11 @@ class Player(commands.Cog):
             del self.tracks[ctx.guild.id]
             await self.delete_messages(ctx.guild.id)
             await self._stop(voice)
-        if not ctx.author.bot:
+        if not isinstance(ctx, ComponentContext):
             embed = embed_utils.create_music_embed(
-                description="Останавливаю прослушивание"
+                description="Заканчиваю прослушивание"
             )
-            await ctx.send(embed=embed, delete_after=5)
+            await ctx.send(embed=embed)
 
     @cog_ext.cog_slash(
         name="queue",
@@ -511,7 +510,7 @@ class Player(commands.Cog):
         name="shuffle",
         description="Перемешать очередь"
     )
-    async def shuffle_command(self, ctx: commands.Context):
+    async def shuffle_command(self, ctx):
         """Перемешать треки в очереди"""
         if not await check_self_voice(ctx):
             return
@@ -520,11 +519,11 @@ class Player(commands.Cog):
             return
         tracks = self.tracks[ctx.guild.id]["tracks"]
         if len(tracks) == 1:
-            if not ctx.author.bot:
+            if not isinstance(ctx, ComponentContext):
                 embed = embed_utils.create_music_embed(
                     description="Зачем перемешивать очередь из одного трека?🤔"
                 )
-                await ctx.send(embed=embed)
+                await ctx.send(embed=embed, hidden=True)
             return
         shuffle(tracks)
         self.tracks[ctx.guild.id] = {"tracks": tracks, "index": -1}
@@ -532,14 +531,14 @@ class Player(commands.Cog):
             self.queue_messages[ctx.guild.id]["page"] = 1
 
         await self._stop(voice, force=False)
-        if not ctx.author.bot:
+        if not isinstance(ctx, ComponentContext):
             embed = embed_utils.create_music_embed(
                 description="Очередь перемешана"
             )
             await ctx.send(embed=embed, delete_after=5)
 
     async def _skipped_tracks_msg(self, ctx, track, index):
-        if ctx.author.bot:
+        if isinstance(ctx, ComponentContext):
             return
         requester = self.client.get_user(track["requester"])
         description = f"Трек пропущен: **{index + 1}. {track['name']}**"
@@ -558,7 +557,7 @@ class Player(commands.Cog):
         }]
     )
     async def next_command(
-            self, ctx: commands.Context, count: Optional[int] = 1
+            self, ctx, count: Optional[int] = 1
     ) -> None:
         """Пропустить один или несколько треков.
         Чтобы пропустить несколько треков, необходимо добавить число к команде"""
@@ -595,7 +594,7 @@ class Player(commands.Cog):
         }]
     )
     async def prev_command(
-            self, ctx: commands.Context, count: Optional[int] = 1
+            self, ctx, count: Optional[int] = 1
     ) -> None:
         """Вернуться на один или несколько треков назад.
         Про количество смотрите в команде **next**"""
@@ -658,10 +657,11 @@ class Player(commands.Cog):
             voice = await self._join(ctx)
         if ctx.guild.id not in self.tracks:
             self.tracks[ctx.guild.id] = {"tracks": tracks, "index": 0}
-            voice.play(
-                discord.FFmpegPCMAudio(source=tracks[0]["url"]),
-                after=lambda x: self.play_next(x, voice, ctx),
+            source = await discord.FFmpegOpusAudio.from_probe(
+                tracks[0]["url"], **FFMPEG_OPTIONS
             )
+            voice.play(source=source,
+                       after=lambda errors: self.play_next(errors, voice, ctx))
             await self.player_command.invoke(ctx)
             return
 
@@ -726,7 +726,7 @@ class Player(commands.Cog):
             "type": 4
         }]
     )
-    async def jump_command(self, ctx: commands.Context, index: int):
+    async def jump_command(self, ctx, index: int):
         """Перепрыгнуть на определенный трек под номером, который вы скажете боту в команде"""
         if not await check_self_voice(ctx):
             return
@@ -738,10 +738,16 @@ class Player(commands.Cog):
             embed = embed_utils.create_error_embed(
                 message=f"Некорректный индекс. Максимальный - {len(tracks)}"
             )
-            await ctx.send(embed=embed, delete_after=5)
+            await ctx.send(embed=embed, hidden=True)
             return
         self.tracks[ctx.guild.id]["index"] = index - 2
         await self._stop(voice, force=False)
+        if not isinstance(ctx, ComponentContext):
+            embed = embed_utils.create_music_embed(
+                title="Перепрыгиваю на трек",
+                description=f"**{index}. {tracks[index - 1]['name']}**"
+            )
+            await ctx.send(embed=embed, delete_after=5)
 
     @cog_ext.cog_slash(
         name="loop",
@@ -751,7 +757,7 @@ class Player(commands.Cog):
         """Изменить настройки зацикливания очереди"""
         is_looped = functions.get_guild_data(ctx.guild, "loop_queue")
         functions.change_loop_option(ctx.guild.id, not is_looped)
-        if ctx.author.bot:
+        if isinstance(ctx, ComponentContext):
             await self.player_message_update(ctx)
             return
         cliche = "Зацикливание очереди {} для вашей гильдии"
@@ -767,7 +773,7 @@ class Player(commands.Cog):
         name="leave",
         description="Выгнать бота из голосового канала"
     )
-    async def leave_command(self, ctx: commands.Context):
+    async def leave_command(self, ctx):
         """Прогнать бота из голосового канала(останавливает прослушивание и очищает очередь)"""
         voice = ctx.voice_client
         if voice.is_connected():
@@ -781,7 +787,7 @@ class Player(commands.Cog):
             embed = embed_utils.create_info_embed(
                 description="Ухожу"
             )
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, delete_after=3)
 
     @cog_ext.cog_slash(
         name="save",
@@ -808,7 +814,7 @@ class Player(commands.Cog):
         if playlist_name is None:
             embed = embed_utils.create_error_embed(
                 message="В вашей гильдии сохранено слишком много плейлистов\n"
-                        "Максимальное кол-во: `10`"
+                        "Максимальное кол-во на данный момент: `10`"
             )
             return await ctx.send(embed=embed)
 
@@ -962,43 +968,42 @@ class Player(commands.Cog):
                     return await self._leaving(voice, member.guild.id)
 
     @commands.Cog.listener()
+    async def on_component(self, ctx: ComponentContext):
+        await ctx.defer(ignore=True)
+        if ctx.custom_id == "shuffle":
+            await self.shuffle_command.invoke(ctx)
+            return
+        if ctx.custom_id == "previous":
+            await self.prev_command.invoke(ctx)
+            return
+        if ctx.custom_id == "play_pause":
+            voice = ctx.voice_client
+            if voice is not None:
+                if voice.is_playing():
+                    await self.pause_command.invoke(ctx)
+                elif voice.is_paused():
+                    await self.resume_command.invoke(ctx)
+            return
+        if ctx.custom_id == "next":
+            await self.next_command.invoke(ctx)
+            return
+        if ctx.custom_id == "stop":
+            await self.stop_command.invoke(ctx)
+            return
+        if ctx.custom_id == "loop":
+            await self.loop_command.invoke(ctx)
+            return
+        if ctx.custom_id == "queue":
+            await self.queue_command.invoke(ctx)
+            return
+
+    @commands.Cog.listener()
     async def on_reaction_add(self, reaction: discord.Reaction, user: discord.Member):
 
         client = self.client
         if reaction.message.author == user:
             return
         ctx = await client.get_context(reaction.message)
-        if reaction.message.guild.id in self.player_messages:
-            if reaction.message.id == self.player_messages[ctx.guild.id].id:
-                if reaction.emoji not in PLAYER_EMOJI:
-                    return
-                if reaction.emoji == "⏪":
-                    return await self.prev_command.invoke(ctx)
-
-                if reaction.emoji == "▶":
-                    voice = ctx.voice_client
-                    if voice:
-                        if voice.is_playing():
-                            return await self.pause_command.invoke(ctx)
-                        if voice.is_paused():
-                            return await self.resume_command.invoke(ctx)
-
-                if reaction.emoji == "⏩":
-                    return await self.next_command.invoke(ctx)
-
-                if reaction.emoji == "⏹":
-                    return await self.stop_command.invoke(ctx)
-
-                if reaction.emoji == "🔁":
-                    return await self.loop_command.invoke(ctx)
-
-                if reaction.emoji == "🔀":
-                    return await self.shuffle_command.invoke(ctx)
-
-                if reaction.emoji == "📑":
-                    return await self.queue_command.invoke(ctx)
-
-                return
 
         if reaction.message.guild.id in self.queue_messages:
 
