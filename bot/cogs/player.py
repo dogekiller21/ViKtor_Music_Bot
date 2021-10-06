@@ -170,7 +170,7 @@ class Player(commands.Cog):
         page, _ = self.get_page_counter(ctx.guild.id)
         if page != (now_page := self.queue_messages[ctx.guild.id]["page"]):
             now_page = None
-        # TODO ебанутые 3 строчки сверху нужно пересмотреть и понять зачем они нужны
+
         embed = self.create_queue_embed(ctx, page=now_page)
         if embed is None:
             return
@@ -178,7 +178,7 @@ class Player(commands.Cog):
         try:
             await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
         except discord.NotFound:
-            return
+            del self.queue_messages[ctx.guild.id]
 
     async def player_message_update(self, ctx) -> None:
         if not self._check_player_msg(ctx.guild.id):
@@ -190,7 +190,7 @@ class Player(commands.Cog):
         try:
             await self.player_messages[ctx.guild.id].edit(embed=embed)
         except discord.NotFound:
-            return
+            del self.player_messages[ctx.guild.id]
 
     async def update_messages(self, ctx) -> None:
         await self.player_message_update(ctx=ctx)
@@ -391,11 +391,14 @@ class Player(commands.Cog):
         tracks_options = []
         for i, track in enumerate(tracks):
             duration = player_msg_utils.get_duration(track["duration"])
-
+            name = f"{track['name']}"
+            if len(name) > 50:
+                name = f"{name[:50]} ..."
             tracks_options.append(
-                create_select_option(label=f"{track['name']}",
-                                     description=f"{track['name']} ({duration})",
-                                     value=str(i))
+                create_select_option(label=f"{name}",
+                                     description=f"{name} ({duration})",
+                                     value=str(i),
+                                     emoji="🎵")
             )
 
         tracks_select = create_select(
@@ -404,19 +407,36 @@ class Player(commands.Cog):
             min_values=1
         )
         tracks_component = create_actionrow(tracks_select)
-        message = await ctx.send("Выберите трек для добавления в очередь", components=[tracks_component])
-        tracks_ctx: ComponentContext = await wait_for_component(self.client, components=tracks_component)
-        selected_value = int(tracks_ctx.selected_options[0])
-        selected_track = tracks[selected_value]
-
-        tracks_select["options"][selected_value]["default"] = True
-        tracks_select["disabled"] = True
-        new_tracks_component = create_actionrow(tracks_select)
+        content = "Выберите трек для добавления в очередь"
+        message = await ctx.send(content=content,
+                                 components=[tracks_component])
         try:
-            await message.edit(components=[new_tracks_component])
-        except NotFound:
-            pass
-        await self._add_tracks_to_queue(ctx, tracks=[selected_track])
+            tracks_ctx: ComponentContext = await wait_for_component(self.client,
+                                                                    components=tracks_component,
+                                                                    timeout=30)
+        except asyncio.TimeoutError:
+            tracks_select["options"].append(
+                create_select_option(
+                    label="Время вышло",
+                    value="timed_out",
+                    emoji="⏱",  # ⌛
+                    default=True
+                )
+            )
+        else:
+
+            selected_value = int(tracks_ctx.selected_options[0])
+
+            tracks_select["options"][selected_value]["default"] = True
+            selected_track = tracks[selected_value]
+            await self._add_tracks_to_queue(ctx, tracks=[selected_track])
+        finally:
+            tracks_select["disabled"] = True
+            new_tracks_component = create_actionrow(tracks_select)
+            try:
+                await message.edit(components=[new_tracks_component])
+            except NotFound:
+                pass
 
     @cog_ext.cog_slash(
         name="pause",
@@ -435,7 +455,7 @@ class Player(commands.Cog):
             embed = embed_utils.create_music_embed(
                 description="Пауза"
             )
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, delete_after=3)
 
     @cog_ext.cog_slash(
         name="resume",
@@ -452,7 +472,7 @@ class Player(commands.Cog):
             embed = embed_utils.create_music_embed(
                 description="Продолжаем слушать"
             )
-            await ctx.send(embed=embed, delete_after=5, hidden=True)
+            await ctx.send(embed=embed, delete_after=3)
 
     @cog_ext.cog_slash(
         name="stop",
@@ -473,7 +493,7 @@ class Player(commands.Cog):
             embed = embed_utils.create_music_embed(
                 description="Заканчиваю прослушивание"
             )
-            await ctx.send(embed=embed)
+            await ctx.send(embed=embed, delete_after=5)
 
     @cog_ext.cog_slash(
         name="queue",
@@ -545,7 +565,7 @@ class Player(commands.Cog):
         if requester is not None:
             description += f" ({requester.mention})"
         embed = embed_utils.create_music_embed(description=description)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, delete_after=3)
 
     @cog_ext.cog_slash(
         name="next",
@@ -581,8 +601,6 @@ class Player(commands.Cog):
             await self._stop(voice, force=False)
 
         await self._skipped_tracks_msg(ctx, tracks[index], index)
-
-        # TODO заставить все команды отвечать хотя бы одно сообщение
 
     @cog_ext.cog_slash(
         name="prev",
@@ -689,6 +707,7 @@ class Player(commands.Cog):
     )
     async def delete_command(self, ctx: commands.Context, index: int):
         """Удалить из очереди трек под номером, который вы скажете боту"""
+        # TODO bug fix
         if not await check_self_voice(ctx):
             return
         voice = ctx.voice_client
@@ -704,8 +723,6 @@ class Player(commands.Cog):
         embed = embed_utils.create_music_embed(
             description=f"Удаляю трек: **{tracks[index - 1]['name']}**"
         )
-        del tracks[index - 1]
-        await ctx.send(embed=embed, delete_after=5)
         if index - 1 == now_playing:
             if len(tracks) == 1:
                 await self.delete_messages(ctx.guild.id)
@@ -713,6 +730,8 @@ class Player(commands.Cog):
                 self.tracks[ctx.guild.id]["index"] = now_playing - 1
             await self._stop(voice, force=False)
             return
+        del tracks[index - 1]
+        await ctx.send(embed=embed, delete_after=5)
 
         await self.update_messages(ctx)
 
@@ -738,7 +757,7 @@ class Player(commands.Cog):
             embed = embed_utils.create_error_embed(
                 message=f"Некорректный индекс. Максимальный - {len(tracks)}"
             )
-            await ctx.send(embed=embed, hidden=True)
+            await ctx.send(embed=embed, delete_after=5)
             return
         self.tracks[ctx.guild.id]["index"] = index - 2
         await self._stop(voice, force=False)
