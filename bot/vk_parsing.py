@@ -99,3 +99,42 @@ async def get_tracks_by_id(tracks_ids: list[str]):
         track = get_track_info(item, None)
         tracks.append(track)
     return tracks
+
+
+def parse_playlist_info(playlist_dict: dict):
+    title = playlist_dict["title"]
+    if len(title) > 50:
+        title = f"{title[:50]} ..."
+    description = playlist_dict["description"]
+    if len(description) > 50:
+        description = f"{description[:50]} ..."
+    return {
+        "id": playlist_dict["id"],
+        "owner_id": playlist_dict["owner_id"],
+        "title": title,
+        "description": description,
+        "access_key": playlist_dict["access_key"],
+    }
+
+
+async def get_playlists_by_name(playlist_name: str):
+    result = await api.get_context().api_request(
+        method_name="audio.searchPlaylists",
+        params={"q": playlist_name,
+                "count": 10}
+    )
+    items = result["response"].get("items")
+    if items is None:
+        return
+    return [parse_playlist_info(item) for item in items]
+
+
+async def get_playlist_tracks(parsed_playlist: dict):
+    result = await api.get_context().api_request(
+        method_name="audio.get",
+        params={"owner_id": parsed_playlist["owner_id"],
+                "playlist_id": parsed_playlist["id"],
+                "access_key": parsed_playlist["access_key"]}
+    )
+    tracks = result["response"]["items"]
+    return [get_track_info(track, None) for track in tracks]

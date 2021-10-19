@@ -3,7 +3,7 @@ from discord_slash.utils.manage_components import create_button, create_actionro
 
 from bot.bot import client
 
-player_buttons1 = [
+_player_buttons1 = [
     create_button(style=ButtonStyle.gray,
                   emoji="🔀",
                   custom_id="shuffle"),
@@ -26,7 +26,7 @@ player_buttons1 = [
 
 ]
 
-player_buttons2 = [
+_player_buttons2 = [
     create_button(style=ButtonStyle.gray,
                   emoji="🔁",
                   custom_id="loop"),
@@ -35,9 +35,22 @@ player_buttons2 = [
                   emoji="📑",
                   custom_id="queue"),
 ]
-player_action_row1 = create_actionrow(*player_buttons1)
-player_action_row2 = create_actionrow(*player_buttons2)
+_player_action_row1 = create_actionrow(*_player_buttons1)
+_player_action_row2 = create_actionrow(*_player_buttons2)
 
-player_components = [player_action_row1, player_action_row2]
+player_components = [_player_action_row1, _player_action_row2]
+
+
+_queue_buttons = [
+    create_button(style=ButtonStyle.gray,
+                  emoji="⬅",
+                  custom_id="queue_prev"),
+
+    create_button(style=ButtonStyle.gray,
+                  emoji="➡",
+                  custom_id="queue_next")
+]
+
+queue_components = [create_actionrow(*_queue_buttons)]
 
 # TODO раскидать бота по файлам и перенести сюда @client.event \\ on_component(...)

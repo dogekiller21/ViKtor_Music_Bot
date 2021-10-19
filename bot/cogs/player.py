@@ -11,8 +11,8 @@ from discord_slash.utils.manage_components import create_select_option, create_s
     wait_for_component
 
 from bot import vk_parsing, functions
-from .constants import VK_URL_PREFIX, QUEUE_EMOJI, FFMPEG_OPTIONS
-from ..events.components_events import player_components
+from .constants import VK_URL_PREFIX, FFMPEG_OPTIONS, timeout_option
+from ..events.components_events import player_components, queue_components
 from ..utils import playlists_utils, embed_utils, player_msg_utils
 from ..utils.checks import check_user_voice, check_self_voice
 from ..utils.custom_exceptions import (
@@ -115,7 +115,7 @@ class Player(commands.Cog):
 
     # Queue embed
     def create_queue_embed(
-            self, ctx: commands.Context, page: Optional[int] = None
+            self, ctx, page: Optional[int] = None
     ) -> Optional[discord.Embed]:
         if ctx.guild.id not in self.tracks:
             return None
@@ -352,7 +352,7 @@ class Player(commands.Cog):
     @cog_ext.cog_subcommand(
         base="play",
         name="link",
-        description="Проигрывание плейлиста",
+        description="Проигрывание плейлиста по ссылке",
         options=[{
             "name": "link",
             "description": "Ссылка на плейлист",
@@ -413,16 +413,9 @@ class Player(commands.Cog):
         try:
             tracks_ctx: ComponentContext = await wait_for_component(self.client,
                                                                     components=tracks_component,
-                                                                    timeout=30)
+                                                                    timeout=60)
         except asyncio.TimeoutError:
-            tracks_select["options"].append(
-                create_select_option(
-                    label="Время вышло",
-                    value="timed_out",
-                    emoji="⏱",  # ⌛
-                    default=True
-                )
-            )
+            tracks_select["options"].append(timeout_option)
         else:
 
             selected_value = int(tracks_ctx.selected_options[0])
@@ -437,6 +430,59 @@ class Player(commands.Cog):
                 await message.edit(components=[new_tracks_component])
             except NotFound:
                 pass
+
+    @cog_ext.cog_subcommand(
+        base="play",
+        name="playlist",
+        description="Поиск плейлиста для проигрывания",
+        options=[{
+            "name": "playlist_name",
+            "description": "Имя плейлиста",
+            "required": True,
+            "type": 3
+        }]
+    )
+    async def play_playlist_command(self, ctx: SlashContext, playlist_name):
+        if not await check_user_voice(ctx):
+            return
+        playlists = await vk_parsing.get_playlists_by_name(playlist_name)
+        if playlists is None:
+            return
+        playlists_options = []
+        for i, playlist in enumerate(playlists):
+            playlists_options.append(
+                create_select_option(label=playlist["title"],
+                                     description=playlist["description"],
+                                     value=str(i),
+                                     emoji="🧻")
+            )
+
+        playlist_select = create_select(options=playlists_options,
+                                        placeholder="Выберите плейлист для добавления в очередь",
+                                        min_values=1)
+
+        # TODO совместить нижнюю часть с /play request
+
+        component = create_actionrow(playlist_select)
+        content = "Выберите плейлист для добавления в очередь"
+        message = await ctx.send(content=content,
+                                 components=[component])
+        try:
+            playlists_ctx: ComponentContext = await wait_for_component(self.client,
+                                                                       components=component,
+                                                                       timeout=60)
+        except asyncio.TimeoutError:
+            playlist_select["options"].append(timeout_option)
+        else:
+            selected_value = int(playlists_ctx.selected_options[0])
+            playlist_select["options"][selected_value]["default"] = True
+            selected_playlist = playlists[selected_value]
+            tracks = await vk_parsing.get_playlist_tracks(selected_playlist)
+            await self._add_tracks_to_queue(ctx, tracks)
+        finally:
+            playlist_select["disabled"] = True
+            new_component = create_actionrow(playlist_select)
+            await message.edit(components=[new_component])
 
     @cog_ext.cog_slash(
         name="pause",
@@ -504,7 +550,7 @@ class Player(commands.Cog):
             "type": 4
         }]
     )
-    async def queue_command(self, ctx: commands.Context, page: Optional[int] = None):
+    async def queue_command(self, ctx: SlashContext, page: Optional[int] = None):
         """Вызвать сообщение с текущей очередью проигрывания.
         Есть возможность в ручную выбирать страницы, если добавить к команде номер
         Если номер страницы не был выбран, страница будет выбрана как текущая для проигрываемого трека"""
@@ -519,12 +565,12 @@ class Player(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
             return
         embed = self.create_queue_embed(ctx, page)
-        queue_message = await ctx.send(embed=embed)
+        queue_message = await ctx.send(embed=embed, components=queue_components)
         if ctx.guild.id in self.queue_messages:
             await self.queue_messages[ctx.guild.id]["message"].delete(delay=2)
 
         self.queue_messages[ctx.guild.id] = {"message": queue_message, "page": page}
-        await player_msg_utils.add_reactions(emojis=QUEUE_EMOJI, message=queue_message)
+        # await player_msg_utils.add_reactions(emojis=QUEUE_EMOJI, message=queue_message)
 
     @cog_ext.cog_slash(
         name="shuffle",
@@ -989,6 +1035,8 @@ class Player(commands.Cog):
     @commands.Cog.listener()
     async def on_component(self, ctx: ComponentContext):
         await ctx.defer(ignore=True)
+
+        # PLAYER COMPONENTS
         if ctx.custom_id == "shuffle":
             await self.shuffle_command.invoke(ctx)
             return
@@ -1016,35 +1064,53 @@ class Player(commands.Cog):
             await self.queue_command.invoke(ctx)
             return
 
-    @commands.Cog.listener()
-    async def on_reaction_add(self, reaction: discord.Reaction, user: discord.Member):
-
-        client = self.client
-        if reaction.message.author == user:
+        # QUEUE COMPONENTS
+        if ctx.custom_id == "queue_prev":
+            page, pages = self.get_page_counter(ctx.guild.id)
+            if page <= 1:
+                return
+            embed = self.create_queue_embed(ctx, page - 1)
+            self.queue_messages[ctx.guild.id]["page"] = page - 1
+            await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
             return
-        ctx = await client.get_context(reaction.message)
+        if ctx.custom_id == "queue_next":
+            page, pages = self.get_page_counter(ctx.guild.id)
+            if pages < 2 or page == pages:
+                return
+            embed = self.create_queue_embed(ctx, page + 1)
+            self.queue_messages[ctx.guild.id]["page"] = page + 1
+            await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
+            return
 
-        if reaction.message.guild.id in self.queue_messages:
-
-            if reaction.message.id == self.queue_messages[ctx.guild.id]["message"].id:
-                if reaction.emoji not in QUEUE_EMOJI:
-                    return
-                if reaction.emoji == "⬅":
-                    page, pages = self.get_page_counter(ctx.guild.id)
-                    if page <= 1:
-                        return
-                    embed = self.create_queue_embed(ctx, page - 1)
-                    self.queue_messages[ctx.guild.id]["page"] = page - 1
-                    return await self.queue_messages[ctx.guild.id]["message"].edit(
-                        embed=embed
-                    )
-                if reaction.emoji == "➡":
-                    page, pages = self.get_page_counter(ctx.guild.id)
-                    if pages < 2 or page == pages:
-                        return
-                    embed = self.create_queue_embed(ctx, page + 1)
-                    self.queue_messages[ctx.guild.id]["page"] = page + 1
-                    await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
+    # @commands.Cog.listener()
+    # async def on_reaction_add(self, reaction: discord.Reaction, user: discord.Member):
+    #
+    #     client = self.client
+    #     if reaction.message.author == user:
+    #         return
+    #     ctx = await client.get_context(reaction.message)
+    #
+    #     if reaction.message.guild.id in self.queue_messages:
+    #
+    #         if reaction.message.id == self.queue_messages[ctx.guild.id]["message"].id:
+    #             if reaction.emoji not in QUEUE_EMOJI:
+    #                 return
+    #             if reaction.emoji == "⬅":
+    #                 page, pages = self.get_page_counter(ctx.guild.id)
+    #                 if page <= 1:
+    #                     return
+    #                 embed = self.create_queue_embed(ctx, page - 1)
+    #                 self.queue_messages[ctx.guild.id]["page"] = page - 1
+    #                 return await self.queue_messages[ctx.guild.id]["message"].edit(
+    #                     embed=embed
+    #                 )
+    #             if reaction.emoji == "➡":
+    #                 page, pages = self.get_page_counter(ctx.guild.id)
+    #                 if pages < 2 or page == pages:
+    #                     return
+    #                 embed = self.create_queue_embed(ctx, page + 1)
+    #                 self.queue_messages[ctx.guild.id]["page"] = page + 1
+    #                 await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
 
 
 def setup(client):
