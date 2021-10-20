@@ -1,5 +1,7 @@
 from typing import Optional
 
+from vkwave.api.methods._error import APIError
+
 from .config import TokenConfig
 from vkwave.api import API
 
@@ -76,7 +78,7 @@ async def get_audio(url: str, requester) -> list:
 
 
 async def find_tracks_by_name(
-        requester: int, name: str, count: int = 1
+        requester: int, name: str, count: int = 25
 ) -> Optional[list]:
     result = await api.get_context().api_request(
         method_name="audio.search", params={"q": name, "count": count}
@@ -117,16 +119,16 @@ def parse_playlist_info(playlist_dict: dict):
     }
 
 
-async def get_playlists_by_name(playlist_name: str):
+async def get_playlists_by_name(playlist_name: str, count: int = 25):
     result = await api.get_context().api_request(
         method_name="audio.searchPlaylists",
         params={"q": playlist_name,
-                "count": 10}
+                "count": count}
     )
     items = result["response"].get("items")
     if items is None:
         return
-    return [parse_playlist_info(item) for item in items]
+    return [parse_playlist_info(item) for item in items[:count]]
 
 
 async def get_playlist_tracks(parsed_playlist: dict):
@@ -138,3 +140,32 @@ async def get_playlist_tracks(parsed_playlist: dict):
     )
     tracks = result["response"]["items"]
     return [get_track_info(track, None) for track in tracks]
+
+
+async def get_user_saved_tracks(user_name: str, requester):
+    try:
+        user = await api.get_context().api_request(
+            method_name="users.get",
+            params={"user_ids": user_name,
+                    "fields": "uid,first_name,last_name"}
+        )
+    except APIError:
+        return
+    except Exception as err:
+        print("user get error: ", err)
+        return
+    user_id = int(user["response"][0]["id"])
+    try:
+        result = await api.get_context().api_request(
+            method_name="audio.get",
+            params={"owner_id": user_id,
+                    "count": 9999}
+        )
+    except APIError:
+        return
+    except Exception as err:
+        print("user audio error: ", err)  # TODO логгирование
+        return
+    items = result["response"]["items"]
+    tracks = [get_track_info(item, requester) for item in items]
+    return tracks

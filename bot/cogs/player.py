@@ -370,6 +370,35 @@ class Player(commands.Cog):
         tracks = await vk_parsing.get_audio(link, requester=ctx.author.id)
         await self._add_tracks_to_queue(ctx=ctx, tracks=tracks)
 
+    async def _select_options_parser(self, ctx: SlashContext, select: dict, msg_content, timeout: int = 60):
+        """
+        Возвращает номер выбранного пользователем элемента в селекте
+        :return: int
+        """
+        component = create_actionrow(select)
+
+        message = await ctx.send(content=msg_content,
+                                 components=[component])
+        try:
+            component_ctx: ComponentContext = await wait_for_component(self.client,
+                                                                       components=component,
+                                                                       timeout=timeout)
+        except asyncio.TimeoutError:
+            select["options"].append(timeout_option)
+        else:
+
+            selected_value = int(component_ctx.selected_options[0])
+
+            select["options"][selected_value]["default"] = True
+            return selected_value
+        finally:
+            select["disabled"] = True
+            new_component = create_actionrow(select)
+            try:
+                await message.edit(components=[new_component])
+            except NotFound:
+                pass
+
     @cog_ext.cog_subcommand(
         base="play",
         name="request",
@@ -384,7 +413,7 @@ class Player(commands.Cog):
     async def play_request_command(self, ctx: SlashContext, request: str):
         if not await check_user_voice(ctx):
             return
-        tracks = await self._get_tracks_data_by_name(ctx=ctx, name=request, count=10)
+        tracks = await self._get_tracks_data_by_name(ctx=ctx, name=request, count=25)
         if tracks is None:
             return
 
@@ -406,30 +435,12 @@ class Player(commands.Cog):
             placeholder="Выберите трек для добавления в очередь",
             min_values=1
         )
-        tracks_component = create_actionrow(tracks_select)
         content = "Выберите трек для добавления в очередь"
-        message = await ctx.send(content=content,
-                                 components=[tracks_component])
-        try:
-            tracks_ctx: ComponentContext = await wait_for_component(self.client,
-                                                                    components=tracks_component,
-                                                                    timeout=60)
-        except asyncio.TimeoutError:
-            tracks_select["options"].append(timeout_option)
-        else:
-
-            selected_value = int(tracks_ctx.selected_options[0])
-
-            tracks_select["options"][selected_value]["default"] = True
-            selected_track = tracks[selected_value]
-            await self._add_tracks_to_queue(ctx, tracks=[selected_track])
-        finally:
-            tracks_select["disabled"] = True
-            new_tracks_component = create_actionrow(tracks_select)
-            try:
-                await message.edit(components=[new_tracks_component])
-            except NotFound:
-                pass
+        selected_value = await self._select_options_parser(ctx, tracks_select, content)
+        if selected_value is None:
+            return
+        selected_track = tracks[selected_value]
+        await self._add_tracks_to_queue(ctx, tracks=[selected_track])
 
     @cog_ext.cog_subcommand(
         base="play",
@@ -454,35 +465,50 @@ class Player(commands.Cog):
                 create_select_option(label=playlist["title"],
                                      description=playlist["description"],
                                      value=str(i),
-                                     emoji="🧻")
+                                     emoji="🎶")
             )
 
         playlist_select = create_select(options=playlists_options,
                                         placeholder="Выберите плейлист для добавления в очередь",
                                         min_values=1)
 
-        # TODO совместить нижнюю часть с /play request
-
-        component = create_actionrow(playlist_select)
         content = "Выберите плейлист для добавления в очередь"
-        message = await ctx.send(content=content,
-                                 components=[component])
-        try:
-            playlists_ctx: ComponentContext = await wait_for_component(self.client,
-                                                                       components=component,
-                                                                       timeout=60)
-        except asyncio.TimeoutError:
-            playlist_select["options"].append(timeout_option)
-        else:
-            selected_value = int(playlists_ctx.selected_options[0])
-            playlist_select["options"][selected_value]["default"] = True
-            selected_playlist = playlists[selected_value]
-            tracks = await vk_parsing.get_playlist_tracks(selected_playlist)
-            await self._add_tracks_to_queue(ctx, tracks)
-        finally:
-            playlist_select["disabled"] = True
-            new_component = create_actionrow(playlist_select)
-            await message.edit(components=[new_component])
+        selected_value = await self._select_options_parser(ctx, playlist_select, content)
+        if selected_value is None:
+            return
+        selected_playlist = playlists[selected_value]
+        tracks = await vk_parsing.get_playlist_tracks(selected_playlist)
+        await self._add_tracks_to_queue(ctx, tracks)
+
+    @cog_ext.cog_subcommand(
+        base="play",
+        name="user_saved",
+        description="Проигрывание сохраненных треков пользователя",
+        options=[{
+            "name": "user_link",
+            "description": "Ссылка на пользователя",
+            "required": True,
+            "type": 3
+        }]
+    )
+    async def play_user_saved_command(self, ctx, user_link: str):
+        if "vk.com/" not in user_link:
+            embed = embed_utils.create_error_embed(
+                "Некорректная ссылка"
+            )
+            await ctx.send(embed=embed)
+            return
+        await ctx.defer()
+        user = user_link.split("vk.com/")[1]
+        tracks = await vk_parsing.get_user_saved_tracks(user, requester=ctx.author.id)
+        if tracks is None:
+            embed = embed_utils.create_error_embed(
+                "Некорректный пользователь\n"
+                "Либо у данного пользователя закрыта страница / аудиозаписи"
+            )
+            await ctx.send(embed=embed)
+            return
+        await self._add_tracks_to_queue(ctx, tracks)
 
     @cog_ext.cog_slash(
         name="pause",
