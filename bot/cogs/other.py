@@ -7,7 +7,6 @@ from discord_slash import cog_ext
 
 from bot.utils import embed_utils
 from .constants import CustomColors
-from ..bot import slash
 
 
 class Other(commands.Cog):
@@ -21,17 +20,11 @@ class Other(commands.Cog):
     @cog_ext.cog_slash(
         name="help",
         description="Узнать все доступные команды",
-        options=[{
-            "name": "module_name",
-            "description": "Имя модуля",
-            "type": 3
-        }]
+        options=[{"name": "module_name", "description": "Имя модуля", "type": 3}],
     )
     async def help_command(self, ctx, module_name: Optional[str] = None):
         """Вызывает эту команду"""
-        embed = embed_utils.create_info_embed(
-            description="В разработке"
-        )
+        embed = embed_utils.create_info_embed(description="В разработке")
         await ctx.send(embed=embed)
         return
         if module_name is None:

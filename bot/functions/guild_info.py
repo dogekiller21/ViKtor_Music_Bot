@@ -8,7 +8,7 @@ from bot.utils.file_utils import ConfigFile
 
 def get_guild_data(guild: Guild, what_to_search: str) -> Union[bool, str, None]:
     s_guild_id = str(guild.id)
-    guilds_data = ConfigFile.get()["data"]["guilds"]
+    guilds_data = ConfigFile.read()["data"]["guilds"]
 
     if guilds_data.get(s_guild_id) is None:
         guild = functions.save_new_guild(

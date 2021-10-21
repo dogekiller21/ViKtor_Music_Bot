@@ -5,8 +5,7 @@ async def check_self_voice(ctx) -> bool:
     voice = ctx.voice_client
     if voice is None or (not voice.is_playing() and not voice.is_paused()):
         embed = embed_utils.create_error_embed(
-            "Ничего не играет :(\n"
-            "Используйте команду `/play` для проигрывания"
+            "Ничего не играет :(\n" "Используйте команду `/play` для проигрывания"
         )
         await ctx.send(embed=embed, delete_after=5)
         return False

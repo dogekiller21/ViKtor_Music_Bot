@@ -9,7 +9,9 @@ import os
 
 
 intents = discord.Intents.all()
-client = commands.Bot(command_prefix="", intents=intents, self_bot=True, help_command=None)
+client = commands.Bot(
+    command_prefix="", intents=intents, self_bot=True, help_command=None
+)
 slash = SlashCommand(client, sync_commands=True, delete_from_unused_guilds=True)
 
 
@@ -22,9 +24,7 @@ async def on_ready():
 async def on_guild_join(guild):
     guild_id = guild.id
     owner_id = guild.owner_id
-    functions.save_new_guild(
-        guild_id=guild_id, owner_id=owner_id
-    )
+    functions.save_new_guild(guild_id=guild_id, owner_id=owner_id)
 
 
 def run():

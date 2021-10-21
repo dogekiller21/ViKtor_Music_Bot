@@ -36,7 +36,7 @@ def save_new_playlist(
 
 
 def get_single_guild_playlist(guild_id):
-    playlists = PlayListsFile.get()
+    playlists = PlayListsFile.read()
     return playlists.get(str(guild_id))
 
 
@@ -78,8 +78,7 @@ def get_playlists_message(ctx):
         date = date.strftime("%d-%m-%Y")
         embed.add_field(
             name=f"{key}",
-            value=f"`Треков: {len(playlist['tracks'])}`\n"
-                  f"`Дата создания: {date}`",
+            value=f"`Треков: {len(playlist['tracks'])}`\n" f"`Дата создания: {date}`",
             inline=False,
         )
     embed.set_footer(
