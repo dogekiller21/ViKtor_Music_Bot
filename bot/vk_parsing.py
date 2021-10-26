@@ -78,7 +78,7 @@ async def get_audio(url: str, requester) -> list:
 
 
 async def find_tracks_by_name(
-    requester: int, name: str, count: int = 25
+    requester: int, name: str, count: int = 24
 ) -> Optional[list]:
     result = await api.get_context().api_request(
         method_name="audio.search", params={"q": name, "count": count}
@@ -86,20 +86,39 @@ async def find_tracks_by_name(
     items = result["response"].get("items")
     if items is None:
         return
-
-    return [get_track_info(item, requester) for item in items[:count]]
+    return [get_track_info(item, requester) for item in items[:count - 1]]
 
 
 async def get_tracks_by_id(tracks_ids: list[str]):
-    audios = ",".join(tracks_ids)
-    result = await api.get_context().api_request(
-        method_name="audio.getById", params={"audios": audios}
-    )
-    items = result["response"]
+    limit = 500
+    if len(tracks_ids) > limit:
+        audios = []
+        start = 0
+        end = limit
+        while len(audios) <= len(tracks_ids) // limit:
+            # TODO вк возвращает не все треки
+            # temp = tracks_ids[start:end]
+            # print(f"{len(temp)=}")
+            audios.append(",".join(tracks_ids[start:end]))
+            start += limit
+            if end + limit > len(tracks_ids):
+                end = len(tracks_ids) + 1
+            else:
+                end += limit
+
+    else:
+        audios = [",".join(tracks_ids)]
+
     tracks = []
-    for item in items:
-        track = get_track_info(item, None)
-        tracks.append(track)
+    for audios_temp in audios:
+        result = await api.get_context().api_request(
+            method_name="audio.getById", params={"audios": audios_temp}
+        )
+        items = result["response"]
+        # print(f"{len(items)=}")
+        for item in items:
+            track = get_track_info(item, None)
+            tracks.append(track)
     return tracks
 
 
@@ -119,14 +138,14 @@ def parse_playlist_info(playlist_dict: dict):
     }
 
 
-async def get_playlists_by_name(playlist_name: str, count: int = 25):
+async def get_playlists_by_name(playlist_name: str, count: int = 24):
     result = await api.get_context().api_request(
         method_name="audio.searchPlaylists", params={"q": playlist_name, "count": count}
     )
     items = result["response"].get("items")
     if items is None:
         return
-    return [parse_playlist_info(item) for item in items[:count]]
+    return [parse_playlist_info(item) for item in items[:count - 1]]
 
 
 async def get_playlist_tracks(parsed_playlist: dict):
@@ -146,7 +165,7 @@ async def get_user_saved_tracks(user_name: str, requester):
     try:
         user = await api.get_context().api_request(
             method_name="users.get",
-            params={"user_ids": user_name, "fields": "uid,first_name,last_name"},
+            params={"user_ids": user_name},
         )
     except APIError:
         return

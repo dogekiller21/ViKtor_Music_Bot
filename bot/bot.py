@@ -1,7 +1,6 @@
 import discord
 from discord_slash import SlashCommand
 
-from . import functions
 from .config import TokenConfig
 from discord.ext import commands
 
@@ -15,19 +14,9 @@ client = commands.Bot(
 slash = SlashCommand(client, sync_commands=True, delete_from_unused_guilds=True)
 
 
-@client.event
-async def on_ready():
-    print(f"We have logged in as {client.user}")
-
-
-@client.event
-async def on_guild_join(guild):
-    guild_id = guild.id
-    owner_id = guild.owner_id
-    functions.save_new_guild(guild_id=guild_id, owner_id=owner_id)
-
-
 def run():
+    from bot.events import client
+
     cogs_path = "bot{delimiter}cogs"
 
     for filename in os.listdir(cogs_path.format(delimiter="/")):
