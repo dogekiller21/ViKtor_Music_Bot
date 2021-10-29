@@ -12,7 +12,6 @@ from bot.utils import embed_utils, player_msg_utils
 class PlayerStorage(dict):
     def __init__(self, queue_messages: QueueMessagesStorage, client: Bot):
         super().__init__()
-        self: dict[int, dict[str, Union[int, discord.Message]]]
         self.queue_messages = queue_messages
         self.tracks = self.queue_messages.tracks
         self.client = client

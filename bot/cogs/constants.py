@@ -8,9 +8,18 @@ FFMPEG_OPTIONS = {
 }
 
 TIMEOUT_OPTION = create_select_option(
-    label="Время вышло", value="timed_out", emoji="⏱", default=True  # ⌛
+    label="Время вышло", value="_timed_out", emoji="⏱", default=True  # ⌛
+)
+
+CANCEL_OPTION = create_select_option(
+    label="Отменено", value="_canceled", emoji="❌", default=True
 )
 DEFAULT_ICON_URL = "https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png"
+
+
+class BotEmoji:
+    SINGLE_TRACK_EMOJI = "🎵"
+    PLAYLIST_EMOJI = "🎶"
 
 
 class CustomColors:

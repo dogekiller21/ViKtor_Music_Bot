@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 from vkwave.api.methods._error import APIError
 
@@ -44,22 +44,23 @@ def get_thumb(track_info: dict):
     return track_info["album"]["thumb"]["photo_270"]
 
 
-def get_track_info(item: dict, requester: Optional[int]):
+def get_track_info(item: dict, requester: Optional[int] = None) -> dict[str, Union[str, int]]:
     image = get_thumb(item)
     name = f"{item['title']} - {item['artist']}"
     item["url"] = item["url"].split("?extra")[0]
     track_id = f"{item['owner_id']}_{item['id']}"
+
     return {
         "url": item["url"],
         "name": name,
         "duration": item["duration"],
         "thumb": image,
-        "requester": requester,
         "id": track_id,
+        "requester": requester
     }
 
 
-async def get_audio(url: str, requester) -> list:
+async def get_audio(url: str, requester: int) -> Optional[list]:
     # https://vk.com/music/album/-2000775086_8775086_3020c01f90d96ecf46
     # https://vk.com/audios283345310?z=audio_playlist-2000775086_8775086%2F3020c01f90d96ecf46
 
@@ -67,26 +68,23 @@ async def get_audio(url: str, requester) -> list:
     # https://vk.com/audios283345310?z=audio_playlist283345310_50
     params = optimize_link(link=url)
 
-    tracks = []
     response = await api.get_context().api_request(
         method_name="audio.get", params=params
     )
-    for item in response["response"]["items"]:
-        track = get_track_info(item, requester)
-        tracks.append(track)
-    return tracks
+    items = response["response"].get("items")
+    if items is None or len(items) == 0:
+        return
+    return [get_track_info(item, requester) for item in items]
 
 
-async def find_tracks_by_name(
-    requester: int, name: str, count: int = 24
-) -> Optional[list]:
+async def find_tracks_by_name(requester: int, name: str, count: int) -> Optional[list]:
     result = await api.get_context().api_request(
         method_name="audio.search", params={"q": name, "count": count}
     )
     items = result["response"].get("items")
-    if items is None:
+    if items is None or len(items) == 0:
         return
-    return [get_track_info(item, requester) for item in items[:count - 1]]
+    return [get_track_info(item, requester) for item in items[:count]]
 
 
 async def get_tracks_by_id(tracks_ids: list[str]):
@@ -122,7 +120,8 @@ async def get_tracks_by_id(tracks_ids: list[str]):
     return tracks
 
 
-def parse_playlist_info(playlist_dict: dict):
+# PLAYLISTS PARSING
+def parse_playlist_info(playlist_dict: dict, requester: Optional[int] = None):
     title = playlist_dict["title"]
     if len(title) > 50:
         title = f"{title[:50]} ..."
@@ -135,20 +134,21 @@ def parse_playlist_info(playlist_dict: dict):
         "title": title,
         "description": description,
         "access_key": playlist_dict["access_key"],
+        "requester": requester
     }
 
 
-async def get_playlists_by_name(playlist_name: str, count: int = 24):
+async def find_playlists_by_name(requester: int, playlist_name: str, count: int):
     result = await api.get_context().api_request(
         method_name="audio.searchPlaylists", params={"q": playlist_name, "count": count}
     )
     items = result["response"].get("items")
-    if items is None:
+    if items is None or len(items) == 0:
         return
-    return [parse_playlist_info(item) for item in items[:count - 1]]
+    return [parse_playlist_info(item, requester) for item in items[:count]]
 
 
-async def get_playlist_tracks(parsed_playlist: dict):
+async def get_playlist_tracks(parsed_playlist: dict, requester: Optional[int] = None):
     result = await api.get_context().api_request(
         method_name="audio.get",
         params={
@@ -158,10 +158,11 @@ async def get_playlist_tracks(parsed_playlist: dict):
         },
     )
     tracks = result["response"]["items"]
-    return [get_track_info(track, None) for track in tracks]
+    return [get_track_info(track, requester) for track in tracks]
 
 
-async def get_user_saved_tracks(user_name: str, requester):
+# USER SAVED AUDIO
+async def get_user_saved_tracks(user_name: str, requester: int):
     try:
         user = await api.get_context().api_request(
             method_name="users.get",

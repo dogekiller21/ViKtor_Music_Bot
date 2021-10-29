@@ -16,4 +16,6 @@ queue_components = [create_actionrow(
     create_button(style=ButtonStyle.gray, emoji="➡", custom_id="queue_next"),
 )]
 
+CANCEL_BUTTON = create_actionrow(create_button(style=ButtonStyle.gray, emoji="✖", custom_id="cancel_select"))
+
 # TODO раскидать бота по файлам и перенести сюда @client.event \\ on_component(...)

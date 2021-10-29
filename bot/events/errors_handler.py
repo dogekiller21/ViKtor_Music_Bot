@@ -1,9 +1,9 @@
 import traceback
 
-from discord_slash import SlashContext
+from discord_slash import SlashContext, MenuContext
 from discord_slash.error import CheckFailure
 
-from bot.utils import embed_utils
+from bot.utils import message_utils
 
 from ..bot import client
 
@@ -15,15 +15,15 @@ async def slash_error_handler(ctx: SlashContext, error: Exception):
     member_voice_needed = ["play", "playlist"]
     if isinstance(error, CheckFailure):
         if ctx.name in voice_client_needed:
-            embed = embed_utils.create_error_embed(
-                message="Ничего не играет :(\nИспользуйте команду `/play` или `/search`"
+            await message_utils.send_error_message(
+                ctx,
+                description="Ничего не играет :(\nИспользуйте команду `/play`"
             )
-            await ctx.send(embed=embed)
             return
-        if ctx.name in member_voice_needed:
-            embed = embed_utils.create_error_embed(
-                message="Вы должны быть подключены к голосовому каналу"
+        if isinstance(ctx, MenuContext) or ctx.name in member_voice_needed:
+            await message_utils.send_error_message(
+                ctx,
+                description="Вы должны быть подключены к голосовому каналу"
             )
-            await ctx.send(embed=embed)
             return
-    traceback.print_exc()
+    traceback.print_exc()  # TODO сделать норм вывод tb

@@ -1,23 +1,28 @@
 from typing import Optional
 
 import discord
+from discord.embeds import EmptyEmbed
 
 from ..cogs.constants import CustomColors
 
 
-def create_error_embed(message: str, image: Optional[str] = None) -> discord.Embed:
+def create_error_embed(
+        *,
+        title: Optional[str] = None,
+        message: str
+) -> discord.Embed:
     embed = discord.Embed(description=message, color=CustomColors.ERROR_COLOR)
-    if image is not None:
-        embed.set_thumbnail(url=image)
+    if title is not None:
+        embed.title = title
     return embed
 
 
 def create_music_embed(
-    *,
-    title: Optional[str] = None,
-    description: str,
-    footer: Optional[str] = None,
-    image: Optional[str] = None,
+        *,
+        title: Optional[str] = None,
+        description: Optional[str] = EmptyEmbed,
+        footer: Optional[str] = None,
+        image: Optional[str] = None,
 ) -> discord.Embed:
     embed = discord.Embed(description=description, color=CustomColors.MUSIC_COLOR)
     if title is not None:
@@ -30,9 +35,9 @@ def create_music_embed(
 
 
 def create_info_embed(
-    *,
-    title: Optional[str] = None,
-    description: str,
+        *,
+        title: Optional[str] = None,
+        description: str,
 ) -> discord.Embed:
     embed = discord.Embed(description=description, color=CustomColors.INFO_COLOR)
     if title is not None:
