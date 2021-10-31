@@ -19,7 +19,8 @@ from bot import vk_parsing, functions
 from .constants import VK_URL_PREFIX, FFMPEG_OPTIONS, TIMEOUT_OPTION, CANCEL_OPTION, BotEmoji
 from .player_storage import QueueMessagesStorage, TracksStorage
 from .player_storage.player import PlayerStorage
-from ..events.components_events import player_components, queue_components, CANCEL_BUTTON
+from ..events.components_events import player_components, CANCEL_BUTTON
+from ..pagination.pagination import EmbedPagination
 from ..utils import playlists_utils, embed_utils, player_msg_utils, message_utils
 from ..utils.checks import check_user_voice, check_self_voice
 from ..utils.custom_exceptions import (
@@ -407,18 +408,29 @@ class Player(commands.Cog):
         """Вызвать сообщение с текущей очередью проигрывания.
         Есть возможность в ручную выбирать страницы, если добавить к команде номер
         Если номер страницы не был выбран, страница будет выбрана как текущая для проигрываемого трека"""
-
-        page, pages = self.queue_messages.get_page_counter(ctx.guild.id, page)
+        if page is None:
+            page = self.queue_messages.get_starting_page(ctx.guild.id)
+        pages = self.queue_messages.get_pages_counter(ctx.guild.id)
 
         if page > pages:
             await message_utils.send_error_message(ctx, description="Нет такой страницы")
             return
-        embed = self.queue_messages.create_queue_embed(ctx, page)
-        queue_message = await ctx.send(embed=embed, components=queue_components)
-        if ctx.guild.id in self.queue_messages:
-            await self.queue_messages[ctx.guild.id]["message"].delete(delay=2)
 
-        self.queue_messages[ctx.guild.id] = {"message": queue_message, "page": page}
+        if ctx.guild.id in self.queue_messages:
+            await self.queue_messages[ctx.guild.id].delete(delay=2)
+
+        pagination = EmbedPagination(target_callable=self._func, target_callable_kwargs={"ctx": ctx},
+                                     start_page=page, max_page=pages, client=ctx.bot)
+        self.queue_messages[ctx.guild.id] = pagination
+
+        await pagination.send(ctx)
+
+    async def _func(self, index, ctx):
+        pages = self.queue_messages.get_pages_counter(ctx.guild.id)
+
+        embed = self.queue_messages.create_queue_embed(ctx, index + 1)
+        self.queue_messages[ctx.guild.id].max_page = pages
+        return embed
 
     @cog_ext.cog_slash(
         name="shuffle",
@@ -886,7 +898,7 @@ class Player(commands.Cog):
 
         # QUEUE COMPONENTS
         if ctx.custom_id == "queue_prev":
-            page, pages = self.queue_messages.get_page_counter(ctx.guild.id)
+            page, pages = self.queue_messages.get_pages_counter(ctx.guild.id)
             if page <= 1:
                 return
             embed = self.queue_messages.create_queue_embed(ctx, page - 1)
@@ -894,7 +906,7 @@ class Player(commands.Cog):
             await self.queue_messages[ctx.guild.id]["message"].edit(embed=embed)
             return
         if ctx.custom_id == "queue_next":
-            page, pages = self.queue_messages.get_page_counter(ctx.guild.id)
+            page, pages = self.queue_messages.get_pages_counter(ctx.guild.id)
             if pages < 2 or page == pages:
                 return
             embed = self.queue_messages.create_queue_embed(ctx, page + 1)

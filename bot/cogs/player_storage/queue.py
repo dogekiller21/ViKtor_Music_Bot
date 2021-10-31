@@ -12,24 +12,24 @@ class QueueMessagesStorage(dict):
         super().__init__()
         self.tracks = tracks
 
-    def get_page_counter(
-        self, guild_id: int, page: Optional[int] = None
-    ) -> tuple[int, int]:
-        tracks = self.tracks[guild_id]["tracks"]
+    def get_starting_page(self, guild_id: int) -> int:
         now_playing = self.tracks[guild_id]["index"]
+        _now_playing = now_playing + 1
+        page = _now_playing // 10
+        if (_now_playing % 10) != 0:
+            page += 1
+        return page - 1
+
+    def get_pages_counter(
+        self, guild_id: int
+    ) -> int:
+        tracks = self.tracks[guild_id]["tracks"]
         tracks_value = len(tracks)
         pages = tracks_value // 10
         if tracks_value % 10 != 0:
             pages += 1
-        if page is None:
-            if guild_id not in self:
-                current_now_playing = now_playing + 1
-                page = current_now_playing // 10
-                if (current_now_playing % 10) != 0:
-                    page += 1
-            else:
-                page = self[guild_id]["page"]
-        return page, pages
+
+        return pages
 
     def create_queue_embed(
         self, ctx, page: Optional[int] = None
@@ -38,11 +38,8 @@ class QueueMessagesStorage(dict):
             return None
         voice = ctx.voice_client
 
-        paused = False
-        if voice.is_paused():
-            paused = True
+        paused = voice.is_paused()
 
-        page, pages = self.get_page_counter(ctx.guild.id, page)
         tracks = self.tracks[ctx.guild.id]["tracks"]
         now_playing = self.tracks[ctx.guild.id]["index"]
 
@@ -51,7 +48,7 @@ class QueueMessagesStorage(dict):
             page_index = (page - 1) * 10
 
         tracks_to_str = []
-        for i, track in enumerate(tracks[page_index : page_index + 10]):
+        for i, track in enumerate(tracks[page_index: page_index + 10]):
 
             duration = player_msg_utils.get_duration(track["duration"])
             track_index = i + page_index
@@ -65,8 +62,6 @@ class QueueMessagesStorage(dict):
                 tracks_to_str[-1] += "\n↑ сейчас играет ↑"
 
         embed = embed_utils.create_music_embed(description="\n\n".join(tracks_to_str))
-        if len(tracks) > 10:
-            embed.set_footer(text=f"Страница: {page} / {pages}")
 
         return embed
 
@@ -79,15 +74,4 @@ class QueueMessagesStorage(dict):
         """
         if not self.check_queue_msg(ctx.guild.id):
             return
-        page, _ = self.get_page_counter(ctx.guild.id)
-        if page != (now_page := self[ctx.guild.id]["page"]):
-            now_page = None
-
-        embed = self.create_queue_embed(ctx, page=now_page)
-        if embed is None:
-            return
-
-        try:
-            await self[ctx.guild.id]["message"].edit(embed=embed)
-        except discord.NotFound:
-            del self[ctx.guild.id]
+        await self[ctx.guild.id].update()
