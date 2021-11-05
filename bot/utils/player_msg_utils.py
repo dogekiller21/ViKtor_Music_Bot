@@ -1,19 +1,10 @@
 import datetime
 from typing import Optional
 
-import discord
 from discord_slash import SlashContext
 
-from bot import functions, vk_parsing
+from bot import vk_parsing
 from bot.utils import embed_utils
-
-
-def get_loop_str_min(guild: discord.Guild) -> str:
-    """
-    Loop settings in string format for embed footer
-    """
-    loop_settings = functions.get_guild_data(guild, "loop_queue")
-    return f"Зацикливание **{'вкл' if loop_settings else 'выкл'}**"
 
 
 def get_duration(duration: int) -> str:

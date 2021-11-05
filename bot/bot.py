@@ -1,6 +1,7 @@
 import discord
 from discord_slash import SlashCommand
 
+from bot.storage.player_storage import BotStorage
 from .config import TokenConfig
 from discord.ext import commands
 
@@ -12,6 +13,7 @@ client = commands.Bot(
     command_prefix="", intents=intents, self_bot=True, help_command=None
 )
 slash = SlashCommand(client, sync_commands=True, delete_from_unused_guilds=True)
+bot_storage = BotStorage(client)
 
 
 def run():
