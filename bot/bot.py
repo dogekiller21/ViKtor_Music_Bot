@@ -7,10 +7,10 @@ from discord.ext import commands
 
 import os
 
-
 intents = discord.Intents.all()
 client = commands.Bot(
-    command_prefix="", intents=intents, self_bot=True, help_command=None
+    command_prefix="", intents=intents, self_bot=True,
+    help_command=None, status=discord.Status.do_not_disturb
 )
 slash = SlashCommand(client, sync_commands=True, delete_from_unused_guilds=True)
 bot_storage = BotStorage(client)

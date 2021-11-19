@@ -159,7 +159,7 @@ class EmbedPagination:
                                               embed=embed,
                                               components=self._components)
         self._is_running = True
-        while self._is_running:
+        while not self.client.is_closed() and self._is_running:
             try:
                 message_delete = self.client.wait_for("raw_message_delete",
                                                       check=lambda p: p.message_id == self._target_message.id)

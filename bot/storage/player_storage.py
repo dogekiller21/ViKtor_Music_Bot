@@ -270,11 +270,18 @@ class BotStorage:
         self.queues: dict[int, Queue] = dict()
         self.player_storage: PlayerStorage = PlayerStorage(client, self.queues)
 
+    def del_queue(self, guild_id: int):
+        if guild_id in self.queues:
+            del self.queues[guild_id]
+
     async def update_messages(self, ctx):
-        await self.queues[ctx.guild.id].message_update()
+        queue = self.queues.get(ctx.guild.id)
+        if queue is not None:
+            await queue.message_update()
+
         await self.player_storage.player_message_update(ctx=ctx)
 
-    async def delete_messages(self, guild_id, delay: int = 2):
+    async def delete_messages(self, guild_id, delay: int = None):
         """
         Delete queue and player messages for guild
         """

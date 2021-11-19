@@ -74,10 +74,13 @@ class Player(commands.Cog):
 
         queue = self.storage.queues.get(ctx.guild.id)
         if queue is None:
+            asyncio.run_coroutine_threadsafe(self.storage.delete_messages(ctx.guild.id), self.loop)
             return
 
         next_track = queue.get_next_track()
         if next_track is None:
+            asyncio.run_coroutine_threadsafe(self.storage.delete_messages(ctx.guild.id), self.loop)
+            asyncio.run_coroutine_threadsafe(self._stop(ctx.voice_client), self.loop)
             return
 
         source = asyncio.run_coroutine_threadsafe(
@@ -542,8 +545,10 @@ class Player(commands.Cog):
             await message_utils.send_error_message(ctx, description="Некорректный индекс")
             return
 
+        duration = player_msg_utils.get_duration(tracks[index-1]["duration"])
         embed = embed_utils.create_music_embed(
-            description=f"Удаляю трек: **{tracks[index - 1]['name']}**"
+            title="Трек удален из очереди",
+            description=f"**{tracks[index - 1]['name']}** ({duration})"
         )
         if index - 1 == current_index:
             if len(queue) == 1:
@@ -788,7 +793,7 @@ class Player(commands.Cog):
 
             if voice and not voice.is_connected() and after.channel is None:
                 if member.guild.id in self.storage.queues:
-                    del self.storage.queues[member.guild.id]
+                    self.storage.del_queue(member.guild.id)
                     await self._stop(voice, force=True)
                 return
             if not member.guild_permissions.deafen_members:

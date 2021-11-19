@@ -6,6 +6,11 @@ from discord.embeds import EmptyEmbed
 from ..cogs.constants import CustomColors
 
 
+class MusicEmbed(discord.Embed):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs, color=CustomColors.MUSIC_COLOR)
+
+
 def create_error_embed(
         *,
         title: Optional[str] = None,
