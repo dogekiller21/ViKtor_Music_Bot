@@ -14,3 +14,6 @@ class TokenConfig:
 class PathConfig:
     PLAYLISTS = "bot/storage/playlists.json"
     CONFIG = "bot/storage/config.json"
+
+
+GENIUS_ACCESS_TOKEN = os.getenv("GENIUS_ACCESS_TOKEN")

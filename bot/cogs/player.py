@@ -15,7 +15,7 @@ from discord_slash.utils.manage_components import (
 )
 
 from bot import vk_parsing
-from .constants import VK_URL_PREFIX, FFMPEG_OPTIONS, TIMEOUT_OPTION, CANCEL_OPTION, BotEmoji
+from .constants import VK_URL_PREFIX, FFMPEG_OPTIONS, TIMEOUT_OPTION, CANCEL_OPTION, BotEmoji, GENIUS_LOGO_URL
 from bot.storage.player_storage import BotStorage, Queue, IncorrectDeleteIndex, RepeatMode
 from ..bot import bot_storage
 from ..events.components_events import player_components, CANCEL_BUTTON
@@ -25,6 +25,7 @@ from ..utils.custom_exceptions import (
     NoGuildPlaylists,
     PlaylistNotFound,
 )
+from ..lyrics import get_lyrics
 
 
 class Player(commands.Cog):
@@ -94,6 +95,30 @@ class Player(commands.Cog):
                    after=lambda err: self.play_next(err, ctx))
 
         asyncio.run_coroutine_threadsafe(self.storage.update_messages(ctx), self.loop)
+
+    @cog_ext.cog_slash(
+        name="lyrics",
+        description="Получить слова на сейчас играющий трек"
+    )
+    async def lyrics_command(self, ctx: SlashContext) -> None:
+        queue = self.storage.queues[ctx.guild.id]
+        track_name = queue.tracks[queue.current_index]["name"]
+        await ctx.defer()
+        lyrics = await self.loop.run_in_executor(None, get_lyrics, track_name)
+        if lyrics is None:
+            await ctx.send(
+                embed=embed_utils.create_error_embed(title="Слова не найдены",
+                                                     message=f"Слова для трека **{track_name}** не найдены")
+            )
+            return
+        embed = embed_utils.create_music_embed(title=f"Слова для трека {track_name}",
+                                               description=lyrics,
+                                               footer="Genius Lyrics",
+                                               footer_img=GENIUS_LOGO_URL)
+
+        await ctx.send(
+            embed=embed
+        )
 
     @cog_ext.cog_slash(
         name="player",
@@ -545,7 +570,7 @@ class Player(commands.Cog):
             await message_utils.send_error_message(ctx, description="Некорректный индекс")
             return
 
-        duration = player_msg_utils.get_duration(tracks[index-1]["duration"])
+        duration = player_msg_utils.get_duration(tracks[index - 1]["duration"])
         embed = embed_utils.create_music_embed(
             title="Трек удален из очереди",
             description=f"**{tracks[index - 1]['name']}** ({duration})"
@@ -772,6 +797,7 @@ class Player(commands.Cog):
     jump_command.add_check(check_self_voice)
     leave_command.add_check(check_self_voice)
     delete_command.add_check(check_self_voice)
+    lyrics_command.add_check(check_self_voice)
 
     play_playlist_command.add_check(check_user_voice)
     play_link_command.add_check(check_user_voice)

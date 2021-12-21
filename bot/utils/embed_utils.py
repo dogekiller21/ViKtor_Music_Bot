@@ -27,13 +27,14 @@ def create_music_embed(
         title: Optional[str] = None,
         description: Optional[str] = EmptyEmbed,
         footer: Optional[str] = None,
+        footer_img: Optional[str] = EmptyEmbed,
         image: Optional[str] = None,
 ) -> discord.Embed:
     embed = discord.Embed(description=description, color=CustomColors.MUSIC_COLOR)
     if title is not None:
         embed.title = title
     if footer is not None:
-        embed.set_footer(text=footer)
+        embed.set_footer(text=footer, icon_url=footer_img)
     if image is not None:
         embed.set_thumbnail(url=image)
     return embed

@@ -16,6 +16,8 @@ CANCEL_OPTION = create_select_option(
 )
 DEFAULT_ICON_URL = "https://avatar-management--avatars.us-west-2.prod.public.atl-paas.net/default-avatar.png"
 
+GENIUS_LOGO_URL = "http://crypttv.com/wp-content/uploads/2020/10/59-598221_genius-lyrics-logo-transparent-clipart.png"
+
 
 class BotEmoji:
     SINGLE_TRACK_EMOJI = "🎵"
