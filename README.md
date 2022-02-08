@@ -1,4 +1,4 @@
-[***Пригласить бота***](https://canary.discord.com/api/oauth2/authorize?client_id=821326877213327371&permissions=0&scope=bot%20applications.commands)
+[***Пригласить бота***](https://discord.com/api/oauth2/authorize?client_id=821326877213327371&permissions=8&scope=bot%20applications.commands)
 
 [Связь со мной](https://vk.com/br1nger1337)
 
