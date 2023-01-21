@@ -1,6 +1,8 @@
+>[*Telegram contant link*](https://t.me/dogekiller21) (If you have some issues installing the bot on your machine or want to contact me for some reason)
+
 >[***Пригласить бота***](https://discord.com/api/oauth2/authorize?client_id=821326877213327371&permissions=8&scope=bot%20applications.commands)
 
->[Связь со мной](https://vk.com/br1nger1337)
+>[Связь со мной (VK)](https://vk.com/br1nger1337)
 
 >Для установки:
 >1. Качаем проектик себе в папку
