@@ -44,7 +44,9 @@ def get_thumb(track_info: dict):
     return track_info["album"]["thumb"]["photo_270"]
 
 
-def get_track_info(item: dict, requester: Optional[int] = None) -> dict[str, Union[str, int]]:
+def get_track_info(
+    item: dict, requester: Optional[int] = None
+) -> dict[str, Union[str, int]]:
     image = get_thumb(item)
     name = f"{item['title']} - {item['artist']}"
     item["url"] = item["url"].split("?extra")[0]
@@ -56,7 +58,7 @@ def get_track_info(item: dict, requester: Optional[int] = None) -> dict[str, Uni
         "duration": item["duration"],
         "thumb": image,
         "id": track_id,
-        "requester": requester
+        "requester": requester,
     }
 
 
@@ -66,15 +68,24 @@ async def get_audio(url: str, requester: int) -> Optional[list]:
 
     # https://vk.com/music/playlist/283345310_50
     # https://vk.com/audios283345310?z=audio_playlist283345310_50
+    offset = 0
     params = optimize_link(link=url)
-
-    response = await api.get_context().api_request(
-        method_name="audio.get", params=params
-    )
-    items = response["response"].get("items")
-    if items is None or len(items) == 0:
+    max_count = 6000
+    first = True
+    items = []
+    all_items = []
+    while items or first:
+        params.update({"count": max_count, "offset": offset})
+        first = False
+        response = await api.get_context().api_request(
+            method_name="audio.get", params=params
+        )
+        items = response["response"].get("items")
+        offset += max_count
+        all_items.extend(items)
+    if not all_items:
         return
-    return [get_track_info(item, requester) for item in items]
+    return [get_track_info(item, requester) for item in all_items]
 
 
 async def find_tracks_by_name(requester: int, name: str, count: int) -> Optional[list]:
@@ -134,7 +145,7 @@ def parse_playlist_info(playlist_dict: dict, requester: Optional[int] = None):
         "title": title,
         "description": description,
         "access_key": playlist_dict["access_key"],
-        "requester": requester
+        "requester": requester,
     }
 
 
