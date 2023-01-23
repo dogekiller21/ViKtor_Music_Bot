@@ -5,7 +5,7 @@ class CustomColors:
     INFO_COLOR = 0xffaf5e
 
 
-DEBUG_GUILDS = [821749224739831828, ]
+DEBUG_GUILDS = []
 
 VK_URL_PREFIX = "vk.com/"
 

@@ -20,10 +20,21 @@ async def find_tracks_by_name(name: str):
 
 async def get_request(url: str):
     request_params = optimize_link(url)
-    response = await api.get_context().api_request(
-        method_name="audio.get", params=request_params,
-    )
-    request_items = response["response"].get("items")
-    if request_items is None or len(request_items) == 0:
+    offset = 0
+    max_count = 6000
+    first = True
+    items = []
+    all_items = []
+    while items or first:
+        request_params.update({"count": max_count, "offset": offset})
+        first = False
+        response = await api.get_context().api_request(
+            method_name="audio.get", params=request_params
+        )
+        items = response["response"].get("items")
+        offset += max_count
+        all_items.extend(items)
+
+    if not all_items:
         return
-    return [parse_track_info(item) for item in request_items]
+    return [parse_track_info(item) for item in all_items]

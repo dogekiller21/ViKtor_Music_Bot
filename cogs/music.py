@@ -76,6 +76,7 @@ class MusicBot(commands.Cog):
         asyncio.run_coroutine_threadsafe(self.storage.update_message(ctx.guild.id), self.client.loop)
 
     async def add_tracks(self, ctx, tracks):
+        tracks = [track for track in tracks if track["url"]]
         if self.storage.get_queue(ctx.guild.id) is None:
 
             new_queue = self.storage.add_queue(ctx.guild.id)
@@ -92,7 +93,7 @@ class MusicBot(commands.Cog):
             voice.play(
                 source=source, after=lambda e: self._play_next(e, ctx)
             )
-            await self.player_command(self, ctx)
+            await self.player_command(ctx)
 
         else:
             self.storage.add_tracks(ctx.guild.id, tracks)
