@@ -1,8 +1,7 @@
-
 class CustomColors:
     ERROR_COLOR = 0xE74C3C
-    MUSIC_COLOR = 0x7532a8
-    INFO_COLOR = 0xffaf5e
+    MUSIC_COLOR = 0x7532A8
+    INFO_COLOR = 0xFFAF5E
 
 
 DEBUG_GUILDS = []
@@ -14,11 +13,7 @@ FFMPEG_OPTIONS = {
     "options": "-vn",
 }
 
-REPEAT_MODES_STR = {
-    0: "None",
-    1: "One",
-    2: "All"
-}
+REPEAT_MODES_STR = {0: "None", 1: "One", 2: "All"}
 
 REPEAT_MODES_EMOJIS = {
     0: "🔁",
@@ -35,3 +30,4 @@ class PlayerEmojis:
     VOL_UP_EMOJI = "🔊"
     VOL_DOWN_EMOJI = "🔉"
     STOP_EMOJI = "⏹"
+    SHUFFLE_EMOJI = "🔀"

@@ -1,4 +1,3 @@
-
 def optimize_link(link: str) -> dict:
     access_key = None
     if link.startswith("https://vk.com/music/album/"):
@@ -43,7 +42,7 @@ def parse_track_info(item: dict):
         "name": name,
         "duration": item["duration"],
         "thumbnail": image,
-        "id": track_id
+        "id": track_id,
     }
 
 

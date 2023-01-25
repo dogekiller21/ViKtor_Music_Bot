@@ -11,18 +11,22 @@ import sqlite3
 class Client(discord.Bot):
     def __init__(self):
         intents = discord.Intents.all()
-        super().__init__(debug_guilds=DEBUG_GUILDS, intents=intents, auto_sync_commands=True)
+        super().__init__(
+            debug_guilds=DEBUG_GUILDS, intents=intents, auto_sync_commands=True
+        )
         self.db = None
         self.cursor = None
 
     def connect_db(self):
         db = sqlite3.connect("player.db", check_same_thread=False)
         cursor = db.cursor()
-        cursor.execute("""CREATE TABLE IF NOT EXISTS guild (
+        cursor.execute(
+            """CREATE TABLE IF NOT EXISTS guild (
             id BIGINT,
             repeatMode INTEGER,
             volume INTEGER
-            )""")
+            )"""
+        )
         db.commit()
         self.db = db
         self.cursor = cursor
@@ -32,7 +36,9 @@ class Client(discord.Bot):
         self.db.commit()
 
     def change_repeat_mode(self, guild_id, repeat_mode):
-        self.cursor.execute(f"UPDATE guild SET repeatMode = {repeat_mode} WHERE id = {guild_id}")
+        self.cursor.execute(
+            f"UPDATE guild SET repeatMode = {repeat_mode} WHERE id = {guild_id}"
+        )
         self.db.commit()
 
     def get_volume(self, guild_id):
@@ -40,7 +46,7 @@ class Client(discord.Bot):
         result = self.cursor.fetchone()
         if result is not None:
             return result[0]
-        return
+        return 100
 
     def get_repeat_mode(self, guild_id):
         self.cursor.execute(f"SELECT repeatMode FROM guild WHERE id = {guild_id}")
@@ -75,6 +81,7 @@ client = Client()
 
 if __name__ == "__main__":
     from handlers import client
+
     cogs_path = "cogs"
     for filename in os.listdir(cogs_path):
         if filename.endswith(".py"):

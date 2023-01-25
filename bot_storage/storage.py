@@ -16,7 +16,7 @@ class Queue:
         self._guild_id = guild_id
         self._tracks = []
         self.current_index = 0
-        self._repeat_mode = RepeatModes(repeat_mode)
+        self._repeat_mode = RepeatModes(repeat_mode or 0)
         self.player_message = None
         self.reverse_mode = False
 
@@ -153,9 +153,9 @@ class BotStorage:
         embed: discord.Embed = Embeds.music_embed(
             title=f"🎧 Player in {voice_client.channel.name}",
             description=f"```📃 Tracks in queue: [{len(queue)}]\n"
-                        f"🔊 Volume: [{volume}%]\n"
-                        f"{repeat_str}\n"
-                        f"{paused_str}```\n"
+            f"🔊 Volume: [{volume}%]\n"
+            f"{repeat_str}\n"
+            f"{paused_str}```\n",
         )
         embed.set_footer(text=f"Reverse mode: {'on' if queue.reverse_mode else 'off'}")
         if current_index - 1 >= 0:
@@ -165,7 +165,7 @@ class BotStorage:
             embed.add_field(
                 name="Previous track",
                 value=f"**{current_index}. {previous_track['name']}** [{previous_track_duration}]\n",
-                inline=False
+                inline=False,
             )
 
         current_track = queue.tracks[current_index]
@@ -173,7 +173,7 @@ class BotStorage:
         embed.add_field(
             name="Current track",
             value=f"**{current_index + 1}. {current_track['name']}** [{current_track_duration}]\n",
-            inline=False
+            inline=False,
         )
 
         if current_index + 1 < len(queue):
@@ -183,7 +183,7 @@ class BotStorage:
             embed.add_field(
                 name="Next track",
                 value=f"**{current_index + 2}. {next_track['name']}** [{next_track_duration}]\n",
-                inline=False
+                inline=False,
             )
         embed.set_thumbnail(url=queue.tracks[current_index]["thumbnail"])
 

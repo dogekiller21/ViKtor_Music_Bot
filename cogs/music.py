@@ -7,7 +7,11 @@ from discord.ext import commands
 
 from bot_storage.storage import BotStorage, Queue
 from constants import VK_URL_PREFIX, FFMPEG_OPTIONS
-from exceptions.custrom_exceptions import UserVoiceException, SelfVoiceException, IncorrectLinkException
+from exceptions.custrom_exceptions import (
+    UserVoiceException,
+    SelfVoiceException,
+    IncorrectLinkException,
+)
 from utils.commands_utils import join_channel
 from utils.embed_utils import Embeds
 from utils.views import Dropdown, DropdownView
@@ -29,8 +33,9 @@ class MusicBot(commands.Cog):
 
         voice = ctx.voice_client
         voice.stop()
-        embed = Embeds.info_embed(title="Stop playing",
-                                  description=f"Playing stopped in {voice.channel.name}")
+        embed = Embeds.info_embed(
+            title="Stop playing", description=f"Playing stopped in {voice.channel.name}"
+        )
         await ctx.respond(embed=embed)
 
     @slash_command(name="join", description="Bot join your voice channel")
@@ -63,17 +68,16 @@ class MusicBot(commands.Cog):
             return
 
         source = discord.PCMVolumeTransformer(
-            discord.FFmpegPCMAudio(next_track["url"],
-                                   **FFMPEG_OPTIONS)
+            discord.FFmpegPCMAudio(next_track["url"], **FFMPEG_OPTIONS)
         )
 
         source.volume = self.client.get_volume(ctx.guild.id) / 100
 
-        voice.play(
-            source=source, after=lambda e: self._play_next(e, ctx)
-        )
+        voice.play(source=source, after=lambda e: self._play_next(e, ctx))
 
-        asyncio.run_coroutine_threadsafe(self.storage.update_message(ctx.guild.id), self.client.loop)
+        asyncio.run_coroutine_threadsafe(
+            self.storage.update_message(ctx.guild.id), self.client.loop
+        )
 
     async def add_tracks(self, ctx, tracks):
         tracks = [track for track in tracks if track["url"]]
@@ -90,29 +94,34 @@ class MusicBot(commands.Cog):
             source.volume = self.client.get_volume(ctx.guild.id) / 100
 
             voice = ctx.voice_client
-            voice.play(
-                source=source, after=lambda e: self._play_next(e, ctx)
-            )
+            voice.play(source=source, after=lambda e: self._play_next(e, ctx))
             await self.player_command(ctx)
 
         else:
             self.storage.add_tracks(ctx.guild.id, tracks)
             if isinstance(tracks, list):
-                embed = Embeds.music_embed(description=f"Added {len(tracks)} tracks to queue")
+                embed = Embeds.music_embed(
+                    description=f"Added {len(tracks)} tracks to queue"
+                )
             else:
-                embed = Embeds.music_embed(title="Track added to queue",
-                                           description=f"**{tracks['name']}**")
+                embed = Embeds.music_embed(
+                    title="Track added to queue", description=f"**{tracks['name']}**"
+                )
             await ctx.respond(embed=embed)
 
     play_group = SlashCommandGroup("play", "Play commands")
 
     @play_group.command(name="playlist", description="Play tracks from VK playlist")
-    async def playlist_command(self, ctx,
-                               link: discord.Option(str, "Playlist link", required=True)):
+    async def playlist_command(
+        self, ctx, link: discord.Option(str, "Playlist link", required=True)
+    ):
         if VK_URL_PREFIX not in link:
             raise IncorrectLinkException
 
-        if ctx.voice_client is None or ctx.voice_client.channel != ctx.author.voice.channel:
+        if (
+            ctx.voice_client is None
+            or ctx.voice_client.channel != ctx.author.voice.channel
+        ):
             await join_channel(ctx)
 
         await ctx.defer()
@@ -125,9 +134,13 @@ class MusicBot(commands.Cog):
             await self.add_tracks(ctx, parsed_items)
 
     @play_group.command(name="search", description="Find track by name")
-    async def search_command(self, ctx,
-                             query: discord.Option(str, "Search query", required=True)):
-        if ctx.voice_client is None or ctx.voice_client.channel != ctx.author.voice.channel:
+    async def search_command(
+        self, ctx, query: discord.Option(str, "Search query", required=True)
+    ):
+        if (
+            ctx.voice_client is None
+            or ctx.voice_client.channel != ctx.author.voice.channel
+        ):
             await join_channel(ctx)
 
         await ctx.defer()
@@ -135,19 +148,27 @@ class MusicBot(commands.Cog):
             tracks = await find_tracks_by_name(query)
         except Exception as error:
             print(f"search command error: {error}")
-            embed = Embeds.error_embed(description=f"Error occurred while parsing your request: {query}")
+            embed = Embeds.error_embed(
+                description=f"Error occurred while parsing your request: {query}"
+            )
             return await ctx.respond(embed=embed)
 
         if tracks is None:
-            embed = Embeds.error_embed(title="Tracks can't be found",
-                                       description=f"Can't find tracks with request: **{query}**")
+            embed = Embeds.error_embed(
+                title="Tracks can't be found",
+                description=f"Can't find tracks with request: **{query}**",
+            )
             return await ctx.respond(embed=embed)
 
         options = []
         for i, track in enumerate(tracks):
-            options.append(discord.SelectOption(label=f"{track['name']}",
-                                                description=f"{track['name']}",
-                                                value=str(i)))
+            options.append(
+                discord.SelectOption(
+                    label=f"{track['name']}",
+                    description=f"{track['name']}",
+                    value=str(i),
+                )
+            )
 
         dropdown = Dropdown(options)
         dropdown_view = DropdownView(dropdown)
@@ -172,33 +193,47 @@ class MusicBot(commands.Cog):
         await ctx.respond(embed=Embeds.music_embed(description="Continuing playing"))
 
     @slash_command(name="volume", description="Edit music volume")
-    async def volume_command(self, ctx,
-                             level: discord.Option(int,
-                                                   description="Volume level (1 - 100)",
-                                                   required=True,
-                                                   min_value=1,
-                                                   max_value=100)):
+    async def volume_command(
+        self,
+        ctx,
+        level: discord.Option(
+            int,
+            description="Volume level (1 - 100)",
+            required=True,
+            min_value=1,
+            max_value=100,
+        ),
+    ):
         ctx.voice_client.source.volume = level / 100
 
-        embed = Embeds.music_embed(title="Volume level changed",
-                                   description=f"Volume level changed to {level / 100} **({level}%)**")
+        embed = Embeds.music_embed(
+            title="Volume level changed",
+            description=f"Volume level changed to {level / 100} **({level}%)**",
+        )
         await ctx.respond(embed=embed)
         self.client.change_volume(ctx.guild.id, level)
 
-    @slash_command(name="repeat", description="Switch repeat mode (None -> One -> All -> None -> ...)")
+    @slash_command(
+        name="repeat",
+        description="Switch repeat mode (None -> One -> All -> None -> ...)",
+    )
     async def repeat_command(self, ctx):
         queue = self.storage.get_queue(ctx.guild.id)
         queue.switch_repeat_mode()
 
-        embed = Embeds.music_embed(title="Repeat mode switched",
-                                   description=f"Repeat mode switched to **{queue.repeat_mode}**")
+        embed = Embeds.music_embed(
+            title="Repeat mode switched",
+            description=f"Repeat mode switched to **{queue.repeat_mode}**",
+        )
 
         await ctx.respond(embed=embed)
 
     @slash_command(name="skip", description="Skip current track")
     async def skip_command(self, ctx):
         queue = self.storage.get_queue(ctx.guild.id)
-        embed = Embeds.music_embed(title="Track skipped", description=f"{queue.current_track['name']}")
+        embed = Embeds.music_embed(
+            title="Track skipped", description=f"{queue.current_track['name']}"
+        )
 
         voice = ctx.voice_client
         voice.stop()
@@ -221,7 +256,9 @@ class MusicBot(commands.Cog):
         if next_track is None:
             embed = Embeds.info_embed(description="Stop playing")
         else:
-            embed = Embeds.music_embed(title="Now playing", description=next_track['name'])
+            embed = Embeds.music_embed(
+                title="Now playing", description=next_track["name"]
+            )
         await ctx.respond(embed=embed)
         queue.switch_reverse_mode()
 
