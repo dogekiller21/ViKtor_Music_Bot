@@ -80,6 +80,8 @@ class MusicBot(commands.Cog):
         )
 
     async def add_tracks(self, ctx, tracks):
+        if not isinstance(tracks, list):
+            tracks = [tracks]
         tracks = [track for track in tracks if track["url"]]
         if self.storage.get_queue(ctx.guild.id) is None:
 
@@ -302,7 +304,9 @@ class MusicBot(commands.Cog):
         voice = member.guild.voice_client
 
         guild_id = member.guild.id
+        print("voice state updated")
         if voice and not voice.is_connected() and after.channel is None:
+            print("disconnected")
             if self.storage.get_queue(guild_id) is None:
                 self.storage.delete_queue(member.guild.id)
                 voice.stop()

@@ -2,6 +2,7 @@ import asyncio
 import random
 
 import discord
+from discord import Interaction
 
 from constants import PlayerEmojis
 
@@ -38,14 +39,14 @@ class PauseButton(discord.ui.Button):
             row=0,
         )
 
-    async def callback(self, interaction):
+    async def callback(self, interaction: Interaction):
         self.voice = interaction.guild.voice_client
         if self.voice.is_paused():
             self.voice.resume()
         else:
             self.voice.pause()
 
-        await self.storage.update_message(interaction.guild.id)
+        await self.storage.update_message(interaction.guild.id, interaction.message)
 
 
 class SkipButton(discord.ui.Button):
