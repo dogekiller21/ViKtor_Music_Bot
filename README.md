@@ -1,6 +1,6 @@
 `apt install libffi-dev libnacl-dev python3-dev`
 
->* In case to resolve **requirements conflict**:
+>In case to resolve **requirements conflict**:
 >* Comment `vkwave` from `requirements.txt`
 >* Install all other packages (e.g `pip install -r requirements.txt`)
 >* Install `vkwave` (e.g `pip install vkwave`)

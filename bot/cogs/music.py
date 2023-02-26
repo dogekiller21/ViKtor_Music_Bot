@@ -1,10 +1,14 @@
+import asyncio
+
 from discord import Bot, ApplicationContext, option, AutocompleteContext, OptionChoice, PCMVolumeTransformer, \
-    FFmpegPCMAudio, VoiceClient, VoiceProtocol, DiscordException, Embed, CheckFailure
+    FFmpegPCMAudio, VoiceClient, VoiceProtocol, DiscordException, Embed, CheckFailure, AudioSource, Guild
 from discord.ext import commands
 from discord.commands import slash_command
+from vkwave.api.methods._error import APIError
 
 from bot.checks import check_user_voice
 from bot.constants import FFMPEG_OPTIONS
+from bot.storage import QueueStorage
 from vk_parsing.parsing import get_client, VkParsingClient
 
 
@@ -13,6 +17,7 @@ class Music(commands.Cog):
         self.client = client
         # self.vk_parser: VkParsingClient = self.client.loop.run_until_complete(get_client())
         self.vk_parser: VkParsingClient = VkParsingClient()
+        self.storage = QueueStorage(client=self.client)
 
     async def _search_track_autocomplete(self, ctx: AutocompleteContext) -> list[OptionChoice]:
         query = ctx.value.lower()
@@ -38,6 +43,40 @@ class Music(commands.Cog):
         #     print(f"{i}. {choice.name}")
         return choices
 
+    def _get_source(self, track_url: str, volume_level: float = .5) -> AudioSource:
+        return PCMVolumeTransformer(
+            original=FFmpegPCMAudio(track_url, **FFMPEG_OPTIONS),
+            volume=volume_level
+        )
+
+    def _after(self, error: Exception, guild: Guild):
+        if error:
+            print(f"Error while playing in {guild.name}: {error}")
+        queue = self.storage.get_queue(guild_id=guild.id, create_if_not_exist=False)
+        if queue is None:
+            print(f"End of queue for guild {guild.name}")
+            return
+        queue.inc_index()
+        current_track = queue.get_current_track()
+        if current_track is None:
+            print(f"End of queue for guild {guild.name}")
+            asyncio.run_coroutine_threadsafe(
+                coro=self.storage.del_queue(guild_id=guild.id), loop=guild.voice_client.client.loop
+            )
+
+            return
+        source = self._get_source(
+            track_url=current_track.mp3_url,
+            volume_level=.5
+        )
+        guild.voice_client.play(
+            source=source,
+            after=lambda err: self._after(error=err, guild=guild)
+        )
+        asyncio.run_coroutine_threadsafe(
+            coro=queue.update_message(), loop=guild.voice_client.client.loop
+        )
+
     @slash_command(
         name="play",
         description="Search and play single track",
@@ -50,13 +89,25 @@ class Music(commands.Cog):
         autocomplete=_search_track_autocomplete
     )
     async def play_single_track(self, ctx: ApplicationContext, track: str):
-        vk_track = await self.vk_parser.get_track_by_id(track_id=track)
-        source = PCMVolumeTransformer(
-            FFmpegPCMAudio(vk_track.mp3_url, **FFMPEG_OPTIONS)
-        )
-        source.volume = .5
-        ctx.voice_client.play(source=source, after=lambda e: print(e))
-        await ctx.respond(vk_track.mp3_url)
+        await ctx.defer()  # без этого ctx.respond возвращает Interaction с пустым .message
+        try:
+            vk_track = await self.vk_parser.get_track_by_id(track_id=track)
+        except APIError:
+            await ctx.respond(f"Error occurred while getting song url, try again later")
+            return
+        queue = self.storage.get_queue(guild_id=ctx.guild_id)
+        queue.add_track(track=vk_track)
+        if not ctx.voice_client.source:
+            source = PCMVolumeTransformer(
+                original=FFmpegPCMAudio(vk_track.mp3_url, **FFMPEG_OPTIONS),
+                volume=.5
+            )
+            ctx.voice_client.play(
+                source=source,
+                after=lambda err: self._after(error=err, guild=ctx.guild)
+            )
+        await queue.send_player_message(ctx=ctx)
+        # await ctx.respond(vk_track.mp3_url)
 
     @slash_command(name="stop", description="Stop playing")
     async def stop_playing(self, ctx: ApplicationContext):
