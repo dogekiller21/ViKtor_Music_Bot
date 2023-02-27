@@ -1,6 +1,7 @@
-from discord import Bot, Message, ApplicationContext, Interaction
+from discord import Bot, Message, ApplicationContext, Interaction, NotFound
 
 from bot.storage.embeds_utils import StorageEmbeds
+from bot.utils import delete_message
 from vk_parsing.models import TrackInfo
 
 
@@ -51,21 +52,20 @@ class Queue:
         else:
             self.player_message = interaction
 
-    async def _delete_message(self, message: Message):
-        try:
-            await message.delete()
-        except Exception as e:
-            print(f"Error while deleting message in {message.guild.name}: {e}")
-            return
+    async def delete_player_message(self):
+        await delete_message(self.player_message)
 
     async def update_message(self):
         if self.player_message is None:
             return
         embed = StorageEmbeds.get_player_message(queue=self)
         if embed is None:
-            await self._delete_message(self.player_message)
+            await self.delete_player_message()
             self.player_message = None
-        await self.player_message.edit(embed=embed)
+        try:
+            await self.player_message.edit(embed=embed)
+        except NotFound:
+            self.player_message = None
 
 
 class QueueStorage:
@@ -74,9 +74,7 @@ class QueueStorage:
         self._client = client
 
     def get_queue(
-            self,
-            guild_id: int,
-            create_if_not_exist: bool = True
+        self, guild_id: int, create_if_not_exist: bool = True
     ) -> Queue | None:
         """
         Return queue for given guild
@@ -89,7 +87,12 @@ class QueueStorage:
         return self._storage.get(guild_id)
 
     async def del_queue(self, guild_id: int):
-        if guild_id not in self._storage:
+        """
+        Deletes queue and player message for given guild
+        """
+        if (
+            queue := self.get_queue(guild_id=guild_id, create_if_not_exist=False)
+        ) is None:
             return
-
+        await queue.delete_player_message()
         del self._storage[guild_id]

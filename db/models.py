@@ -19,12 +19,6 @@ class LoopOption(str, Enum):
 
 class Settings(Model):
     id = fields.IntField(pk=True)
-    guild = fields.ForeignKeyField(
-        model_name="guild", unique=True
-    )
-    loop_option = fields.CharEnumField(
-        enum_type=LoopOption,
-        default=LoopOption.none
-    )
+    guild = fields.ForeignKeyField(model_name="guild", unique=True)
+    loop_option = fields.CharEnumField(enum_type=LoopOption, default=LoopOption.none)
     volume_option = fields.IntField(default=50)
-

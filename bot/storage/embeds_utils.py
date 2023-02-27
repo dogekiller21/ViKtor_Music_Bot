@@ -6,7 +6,6 @@ if TYPE_CHECKING:
 
 
 class StorageEmbeds:
-
     @staticmethod
     def get_player_message(queue: "Queue") -> Embed | None:
         current_track = queue.get_current_track()
@@ -19,16 +18,16 @@ class StorageEmbeds:
         voice = current_guild.voice_client
         play_pause_status = "⏸ Paused" if voice.is_paused() else "▶ Playing"
         embed = Embed(
-            title=f"🎧 Player in \"{voice.channel.name}\"",
+            title=f'🎧 Player in "{voice.channel.name}"',
             description=f"`📃 Tracks in queue: {len(queue)}`\n"
-                        f"`🔊 Volume: {voice.source.volume * 100}%`\n"
-                        f"`{play_pause_status}`\n"
+            f"`🔊 Volume: {voice.source.volume * 100}%`\n"
+            f"`{play_pause_status}`\n",
         )
 
         embed.add_field(
             name="**Now playing**",
             value=f"{queue.current_index + 1}. **{current_track_name}** {current_track.duration}",
-            inline=False
+            inline=False,
         )
         embed.set_thumbnail(url=current_track.thumb_url)
 

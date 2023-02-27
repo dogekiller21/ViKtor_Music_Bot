@@ -1,5 +1,6 @@
-
-DEFAULT_THUMB_URL = "https://i.pinimg.com/564x/63/43/d6/6343d6f55d4b22cdeea0de8f9cb6ebab.jpg"
+DEFAULT_THUMB_URL = (
+    "https://i.pinimg.com/564x/63/43/d6/6343d6f55d4b22cdeea0de8f9cb6ebab.jpg"
+)
 
 
 class UrlHeaders:

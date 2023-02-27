@@ -17,12 +17,12 @@ class LinkParams:
                 "owner_id": self.owner_id,
                 "playlist_id": self.playlist_id,
                 "access_key": self.access_key,
-                "count": self.count
+                "count": self.count,
             }
         return {
             "owner_id": self.owner_id,
             "playlist_id": self.playlist_id,
-            "count": self.count
+            "count": self.count,
         }
 
     @classmethod
@@ -50,9 +50,9 @@ class LinkParams:
         """
         access_key = None
         if url.startswith(UrlHeaders.ALBUM_HEADER):
-            owner_id, playlist_id, access_key = (
-                url.split(UrlHeaders.ALBUM_HEADER)[1].split("_")
-            )
+            owner_id, playlist_id, access_key = url.split(UrlHeaders.ALBUM_HEADER)[
+                1
+            ].split("_")
         elif url.startswith(UrlHeaders.PLAYLIST_HEADER):
             raw_data = url.split(UrlHeaders.PLAYLIST_HEADER)[1].split("_")
             if len(raw_data) > 2:
@@ -105,7 +105,9 @@ class AutocompleteTrackInfo:
         )
 
     @classmethod
-    def parse_response_list(cls, items_list: list[dict]) -> list["AutocompleteTrackInfo"]:
+    def parse_response_list(
+        cls, items_list: list[dict]
+    ) -> list["AutocompleteTrackInfo"]:
         return [cls.from_response(item) for item in items_list if item["url"]]
 
 
@@ -128,5 +130,5 @@ class TrackInfo(AutocompleteTrackInfo):
             vk_id=f"{item_dict.get('owner_id')}_{item_dict.get('id')}",
             duration=cls.parse_duration(item_dict.get("duration")),
             mp3_url=item_dict.get("url"),
-            thumb_url=cls.get_thumb_url(item_dict)
+            thumb_url=cls.get_thumb_url(item_dict),
         )

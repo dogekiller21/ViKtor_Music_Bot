@@ -16,13 +16,12 @@ class VkParsingClient:
 
     async def init_client(self):
         self.client = AIOHTTPClient()
-        self.api = API(clients=self.client, tokens=TokenConfig.VK_TOKEN, api_version="5.90")
+        self.api = API(
+            clients=self.client, tokens=TokenConfig.VK_TOKEN, api_version="5.90"
+        )
 
     async def _make_request(
-            self,
-            method_name: str,
-            params: dict = None,
-            get_items: bool = True
+        self, method_name: str, params: dict = None, get_items: bool = True
     ) -> list[dict]:
         if self.api is None:
             logging.info("VK API client was not initialized until now")
@@ -31,17 +30,19 @@ class VkParsingClient:
         if params is None:
             params = {}
         response = await self.api.get_context().api_request(
-            method_name=method_name, params=params,
+            method_name=method_name,
+            params=params,
         )
         result = response.get("response")
         if get_items:
             return result.get("items")
         return result
 
-    async def search_tracks_by_title(self, title: str) -> list[AutocompleteTrackInfo] | None:
+    async def search_tracks_by_title(
+        self, title: str
+    ) -> list[AutocompleteTrackInfo] | None:
         items = await self._make_request(
-            method_name=ApiMethods.AUDIO_SEARCH,
-            params={"q": title, "count": 25}
+            method_name=ApiMethods.AUDIO_SEARCH, params={"q": title, "count": 25}
         )
         if not items:
             return
@@ -51,11 +52,13 @@ class VkParsingClient:
         return tracks
 
     async def get_track_by_id(self, track_id: str) -> TrackInfo:
-        track = (await self._make_request(
-            method_name=ApiMethods.AUDIO_GET_BY_ID,
-            params={"audios": track_id},
-            get_items=False
-        ))[0]
+        track = (
+            await self._make_request(
+                method_name=ApiMethods.AUDIO_GET_BY_ID,
+                params={"audios": track_id},
+                get_items=False,
+            )
+        )[0]
         return TrackInfo.from_response(item_dict=track)
 
     async def get_playlist_tracks(self, url: str) -> list[AutocompleteTrackInfo] | None:
