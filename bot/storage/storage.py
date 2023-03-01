@@ -38,8 +38,22 @@ class Queue:
             return
         return self.tracks[self.current_index]
 
+    def get_previous_track(self) -> TrackInfo | None:
+        if not self.tracks:
+            return
+        previous_index = self.current_index - 1
+        if previous_index >= 0:
+            return self.tracks[previous_index]
+
+    def get_next_track(self) -> TrackInfo | None:
+        if not self.tracks:
+            return
+        next_index = self.current_index + 1
+        if next_index < len(self):
+            return self.tracks[next_index]
+
     async def send_player_message(self, ctx: ApplicationContext):
-        embed = StorageEmbeds.get_player_message(queue=self)
+        embed = StorageEmbeds.get_player_embed(queue=self)
         if embed is None:
             print(f"Embed is none while sending player message")
             return
@@ -58,7 +72,7 @@ class Queue:
     async def update_message(self):
         if self.player_message is None:
             return
-        embed = StorageEmbeds.get_player_message(queue=self)
+        embed = StorageEmbeds.get_player_embed(queue=self)
         if embed is None:
             await self.delete_player_message()
             self.player_message = None

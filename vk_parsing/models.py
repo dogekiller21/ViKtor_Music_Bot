@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Optional, Union
 
 from vk_parsing.constants import DEFAULT_THUMB_URL, UrlHeaders
 from vk_parsing.exceptions import IncorrectPlaylistUrlException
@@ -26,7 +27,7 @@ class LinkParams:
         }
 
     @classmethod
-    def from_input_url(cls, url: str) -> "LinkParams":
+    def from_input_url(cls, url: str) -> Optional["LinkParams"]:
         """
         (owner_id: -2000421087, playlist_id: 2421087, access_key: 2F67ad8127e3ed2ac574)
 
@@ -107,7 +108,7 @@ class AutocompleteTrackInfo:
     @classmethod
     def parse_response_list(
         cls, items_list: list[dict]
-    ) -> list["AutocompleteTrackInfo"]:
+    ) -> list[Union["AutocompleteTrackInfo", "TrackInfo"]]:
         return [cls.from_response(item) for item in items_list if item["url"]]
 
 
@@ -115,6 +116,12 @@ class AutocompleteTrackInfo:
 class TrackInfo(AutocompleteTrackInfo):
     mp3_url: str
     thumb_url: str
+
+    def get_full_name(self, max_length: int = 40):
+        full_name = f"{self.artist} - {self.title}"
+        if len(full_name) >= max_length:
+            full_name = f"{full_name[:max_length]}..."
+        return full_name
 
     @staticmethod
     def get_thumb_url(item_dict: dict):

@@ -5,7 +5,7 @@ from vkwave.client import AIOHTTPClient
 
 from config import TokenConfig
 from vk_parsing.constants import ApiMethods
-from vk_parsing.exceptions import NotInitializedException
+from vk_parsing.exceptions import NoTracksParsedException
 from vk_parsing.models import TrackInfo, LinkParams, AutocompleteTrackInfo
 
 
@@ -26,7 +26,6 @@ class VkParsingClient:
         if self.api is None:
             logging.info("VK API client was not initialized until now")
             await self.init_client()
-            # raise NotInitializedException
         if params is None:
             params = {}
         response = await self.api.get_context().api_request(
@@ -61,16 +60,19 @@ class VkParsingClient:
         )[0]
         return TrackInfo.from_response(item_dict=track)
 
-    async def get_playlist_tracks(self, url: str) -> list[AutocompleteTrackInfo] | None:
-        request_params = LinkParams.from_input_url(url=url).to_dict()
+    async def get_playlist_tracks(self, url: str) -> list[TrackInfo] | None:
+        request_params = LinkParams.from_input_url(url=url,).to_dict()
         items = await self._make_request(
             method_name=ApiMethods.AUDIO_GET, params=request_params
         )
+        # items = await self._make_request(
+        #     method_name="audio.getPlaylistById", params=request_params
+        # ) # если нужна будет инфа без треков
         if not items:
-            return
-        tracks = AutocompleteTrackInfo.parse_response_list(items_list=items)
+            raise NoTracksParsedException
+        tracks = TrackInfo.parse_response_list(items_list=items)
         if not tracks:
-            return
+            raise NoTracksParsedException
         return tracks
 
 
@@ -90,4 +92,6 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     _client: VkParsingClient = loop.run_until_complete(get_client())
+    playlist = loop.run_until_complete(_client.get_playlist_tracks("https://vk.com/music/playlist/99883438_53060307_f46a1aba7e616001c3"))
+    print(f"{len(playlist)=}")
     loop.run_until_complete(_client.client.close())

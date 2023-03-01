@@ -6,11 +6,8 @@ from discord import (
     option,
     AutocompleteContext,
     OptionChoice,
-    VoiceClient,
-    VoiceProtocol,
-    DiscordException,
     CheckFailure,
-    Guild,
+    Guild, SlashCommandGroup, ApplicationCommandError,
 )
 from discord.ext import commands
 from discord.commands import slash_command
@@ -19,11 +16,13 @@ from vkwave.api.methods._error import APIError
 from bot.checks import check_user_voice, check_self_voice
 from bot.embeds import BotEmbeds
 from bot.storage import QueueStorage
-from bot.utils import get_source
+from bot.utils import get_source, join_author_voice
+from vk_parsing.exceptions import IncorrectPlaylistUrlException
+from vk_parsing.models import TrackInfo
 from vk_parsing.parsing import get_client, VkParsingClient
 
 
-class Music(commands.Cog):
+class MusicCog(commands.Cog, name="Music"):
     def __init__(self, client: Bot):
         self.client = client
         # self.vk_parser: VkParsingClient = self.client.loop.run_until_complete(get_client())
@@ -31,7 +30,7 @@ class Music(commands.Cog):
         self.storage = QueueStorage(client=self.client)
 
     async def _search_track_autocomplete(
-        self, ctx: AutocompleteContext
+            self, ctx: AutocompleteContext
     ) -> list[OptionChoice]:
         query = ctx.value.lower()
         if not query:
@@ -57,6 +56,9 @@ class Music(commands.Cog):
     def _after(self, error: Exception, guild: Guild):
         if error:
             print(f"Error while playing in {guild.name}: {error}")
+        if guild.voice_client is None:
+            print(f"Voice client in {guild.name} is None, skipping _after")
+            return
         queue = self.storage.get_queue(guild_id=guild.id, create_if_not_exist=False)
         if queue is None:
             print(f"End of queue for guild {guild.name}")
@@ -79,32 +81,57 @@ class Music(commands.Cog):
             coro=queue.update_message(), loop=guild.voice_client.client.loop
         )
 
-    @slash_command(
-        name="play",
+    async def _add_tracks(self, ctx: ApplicationContext, tracks: list[TrackInfo]):
+        queue = self.storage.get_queue(guild_id=ctx.guild_id)
+        added_tracks_count = queue.add_tracks(tracks=tracks)
+        if not ctx.voice_client.source:
+            ctx.voice_client.play(
+                source=get_source(track_url=tracks[0].mp3_url, volume_level=0.5),
+                after=lambda err: self._after(error=err, guild=ctx.guild),
+            )
+            await queue.send_player_message(ctx=ctx)
+            return
+        await queue.update_message()
+        await ctx.respond(
+            embed=BotEmbeds.info_embed(
+                description=f"Added {added_tracks_count} track{'s' if added_tracks_count > 1 else ''}\n"
+                            f"**{f'{tracks[0].get_full_name()}' if added_tracks_count > 1 else ''}**"
+            )
+        )
+
+    play_group = SlashCommandGroup("play", "Play commands")
+
+    @play_group.command(
+        name="track",
         description="Search and play single track",
         checks=[check_user_voice],
     )
     @option(
-        name="track",
+        name="track_name",
         description="Type a track name to search",
         required=True,
         autocomplete=_search_track_autocomplete,
     )
-    async def play_single_track(self, ctx: ApplicationContext, track: str):
+    async def play_single_track(self, ctx: ApplicationContext, track_name: str):
         await ctx.defer()  # без этого ctx.respond возвращает Interaction с пустым .message
-        try:
-            vk_track = await self.vk_parser.get_track_by_id(track_id=track)
-        except APIError:
-            await ctx.respond(f"Error occurred while getting song url, try again later")
-            return
-        queue = self.storage.get_queue(guild_id=ctx.guild_id)
-        queue.add_track(track=vk_track)
-        if not ctx.voice_client.source:
-            ctx.voice_client.play(
-                source=get_source(track_url=vk_track.mp3_url, volume_level=0.5),
-                after=lambda err: self._after(error=err, guild=ctx.guild),
-            )
-        await queue.send_player_message(ctx=ctx)
+        #                    await ctx.respond(..., wait=True) может решить это (вроде)
+        vk_track = await self.vk_parser.get_track_by_id(track_id=track_name)
+        await self._add_tracks(ctx=ctx, tracks=[vk_track])
+
+    @play_group.command(
+        name="playlist",
+        description="Play vk album or playlist",
+        checks=[check_user_voice],
+    )
+    @option(
+        name="playlist_link",
+        description="A link to a playlist or album",
+        required=True,
+    )
+    async def play_playlist(self, ctx: ApplicationContext, playlist_link: str):
+        await ctx.defer()
+        playlist_tracks = await self.vk_parser.get_playlist_tracks(url=playlist_link)
+        await self._add_tracks(ctx=ctx, tracks=playlist_tracks)
 
     @slash_command(name="stop", description="Stop playing", checks=[check_self_voice])
     async def stop_playing(self, ctx: ApplicationContext):
@@ -112,23 +139,13 @@ class Music(commands.Cog):
         ctx.voice_client.stop()
         await ctx.respond(embed=BotEmbeds.info_embed(description="Thanks for listening <3"))
 
-    async def _join_author_voice(
-        self, ctx: ApplicationContext
-    ) -> VoiceClient | VoiceProtocol:
-        channel = ctx.user.voice.channel
-        if ctx.voice_client is not None:
-            await ctx.voice_client.move_to(channel)
-        else:
-            await channel.connect()
-        return ctx.voice_client
-
     @play_single_track.before_invoke
     async def ensure_self_voice_and_join(self, ctx: ApplicationContext):
-        await self._join_author_voice(ctx=ctx)
+        await join_author_voice(ctx=ctx)
 
     @play_single_track.error
     async def on_error_play_single_track(
-        self, ctx: ApplicationContext, error: DiscordException
+            self, ctx: ApplicationContext, error: ApplicationCommandError | APIError
     ):
         if isinstance(error, CheckFailure):
             await ctx.respond(
@@ -137,10 +154,46 @@ class Music(commands.Cog):
                 ),
                 ephemeral=True,
             )
+            return
+        if isinstance(error, APIError):
+            await ctx.respond(
+                embed=BotEmbeds.error_embed(
+                    description=f"Error occurred while getting song url, try again later"
+                ),
+                ephemeral=True,
+            )
+            return
+
+    @play_playlist.error
+    async def on_error_play_playlist(self, ctx: ApplicationContext, error: ApplicationCommandError):
+        if isinstance(error, CheckFailure):
+            await ctx.respond(
+                embed=BotEmbeds.error_embed(
+                    description="Connect to voice channel to play playlists"
+                ),
+                ephemeral=True,
+            )
+            return
+        if isinstance(error, IncorrectPlaylistUrlException):
+            await ctx.respond(
+                embed=BotEmbeds.error_embed(
+                    description="Incorrect link passed"
+                ),
+                ephemeral=True,
+            )
+            return
+        if isinstance(error, IncorrectPlaylistUrlException):
+            await ctx.respond(
+                embed=BotEmbeds.error_embed(
+                    description="No tracks in playlist"
+                ),
+                ephemeral=True,
+            )
+            return
 
     @stop_playing.error
-    async def on_error_stop_playing(
-        self, ctx: ApplicationContext, error: DiscordException
+    async def on_error_no_self_voice(
+            self, ctx: ApplicationContext, error: ApplicationCommandError
     ):
         if isinstance(error, CheckFailure):
             await ctx.respond(
@@ -150,4 +203,4 @@ class Music(commands.Cog):
 
 
 def setup(client: Bot):
-    client.add_cog(Music(client=client))
+    client.add_cog(MusicCog(client=client))

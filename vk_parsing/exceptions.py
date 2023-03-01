@@ -1,9 +1,9 @@
-from discord import DiscordException
+from discord import ApplicationCommandError
 
 
-class NotInitializedException(Exception):
+class IncorrectPlaylistUrlException(ApplicationCommandError):
     ...
 
 
-class IncorrectPlaylistUrlException(DiscordException):
+class NoTracksParsedException(ApplicationCommandError):
     ...
