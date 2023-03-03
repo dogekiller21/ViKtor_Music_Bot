@@ -9,7 +9,9 @@ from vk_parsing.exceptions import NoTracksParsedException, IncorrectPlaylistUrlE
 
 @client.listen("on_application_command_error")
 async def command_error_handler(ctx: ApplicationContext, error: DiscordException):
-    if isinstance(error, (CheckFailure, IncorrectPlaylistUrlException, NoTracksParsedException)):
+    if isinstance(
+        error, (CheckFailure, IncorrectPlaylistUrlException, NoTracksParsedException)
+    ):
         pass
     else:
         print("Ignoring exception in command {}:".format(ctx.command), file=sys.stderr)

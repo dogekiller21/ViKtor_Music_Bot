@@ -7,7 +7,9 @@ from discord import (
     AutocompleteContext,
     OptionChoice,
     CheckFailure,
-    Guild, SlashCommandGroup, ApplicationCommandError,
+    Guild,
+    SlashCommandGroup,
+    ApplicationCommandError,
 )
 from discord.ext import commands
 from discord.commands import slash_command
@@ -30,7 +32,7 @@ class MusicCog(commands.Cog, name="Music"):
         self.storage = QueueStorage(client=self.client)
 
     async def _search_track_autocomplete(
-            self, ctx: AutocompleteContext
+        self, ctx: AutocompleteContext
     ) -> list[OptionChoice]:
         query = ctx.value.lower()
         if not query:
@@ -81,7 +83,9 @@ class MusicCog(commands.Cog, name="Music"):
             coro=queue.update_message(), loop=guild.voice_client.client.loop
         )
 
-    async def _add_tracks(self, ctx: ApplicationContext, tracks: list[TrackInfo]):
+    async def _add_tracks_and_send_message(
+        self, ctx: ApplicationContext, tracks: list[TrackInfo]
+    ):
         queue = self.storage.get_queue(guild_id=ctx.guild_id)
         added_tracks_count = queue.add_tracks(tracks=tracks)
         if not ctx.voice_client.source:
@@ -95,7 +99,7 @@ class MusicCog(commands.Cog, name="Music"):
         await ctx.respond(
             embed=BotEmbeds.info_embed(
                 description=f"Added {added_tracks_count} track{'s' if added_tracks_count > 1 else ''}\n"
-                            f"**{f'{tracks[0].get_full_name()}' if added_tracks_count > 1 else ''}**"
+                f"**{f'{tracks[0].get_full_name()}' if added_tracks_count > 1 else ''}**"
             )
         )
 
@@ -116,7 +120,7 @@ class MusicCog(commands.Cog, name="Music"):
         await ctx.defer()  # без этого ctx.respond возвращает Interaction с пустым .message
         #                    await ctx.respond(..., wait=True) может решить это (вроде)
         vk_track = await self.vk_parser.get_track_by_id(track_id=track_name)
-        await self._add_tracks(ctx=ctx, tracks=[vk_track])
+        await self._add_tracks_and_send_message(ctx=ctx, tracks=[vk_track])
 
     @play_group.command(
         name="playlist",
@@ -131,21 +135,24 @@ class MusicCog(commands.Cog, name="Music"):
     async def play_playlist(self, ctx: ApplicationContext, playlist_link: str):
         await ctx.defer()
         playlist_tracks = await self.vk_parser.get_playlist_tracks(url=playlist_link)
-        await self._add_tracks(ctx=ctx, tracks=playlist_tracks)
+        await self._add_tracks_and_send_message(ctx=ctx, tracks=playlist_tracks)
 
     @slash_command(name="stop", description="Stop playing", checks=[check_self_voice])
     async def stop_playing(self, ctx: ApplicationContext):
         await self.storage.del_queue(guild_id=ctx.guild_id)
         ctx.voice_client.stop()
-        await ctx.respond(embed=BotEmbeds.info_embed(description="Thanks for listening <3"))
+        await ctx.respond(
+            embed=BotEmbeds.info_embed(description="Thanks for listening <3")
+        )
 
     @play_single_track.before_invoke
+    @play_playlist.before_invoke
     async def ensure_self_voice_and_join(self, ctx: ApplicationContext):
         await join_author_voice(ctx=ctx)
 
     @play_single_track.error
     async def on_error_play_single_track(
-            self, ctx: ApplicationContext, error: ApplicationCommandError | APIError
+        self, ctx: ApplicationContext, error: ApplicationCommandError | APIError
     ):
         if isinstance(error, CheckFailure):
             await ctx.respond(
@@ -165,7 +172,9 @@ class MusicCog(commands.Cog, name="Music"):
             return
 
     @play_playlist.error
-    async def on_error_play_playlist(self, ctx: ApplicationContext, error: ApplicationCommandError):
+    async def on_error_play_playlist(
+        self, ctx: ApplicationContext, error: ApplicationCommandError
+    ):
         if isinstance(error, CheckFailure):
             await ctx.respond(
                 embed=BotEmbeds.error_embed(
@@ -176,24 +185,20 @@ class MusicCog(commands.Cog, name="Music"):
             return
         if isinstance(error, IncorrectPlaylistUrlException):
             await ctx.respond(
-                embed=BotEmbeds.error_embed(
-                    description="Incorrect link passed"
-                ),
+                embed=BotEmbeds.error_embed(description="Incorrect link passed"),
                 ephemeral=True,
             )
             return
         if isinstance(error, IncorrectPlaylistUrlException):
             await ctx.respond(
-                embed=BotEmbeds.error_embed(
-                    description="No tracks in playlist"
-                ),
+                embed=BotEmbeds.error_embed(description="No tracks in playlist"),
                 ephemeral=True,
             )
             return
 
     @stop_playing.error
     async def on_error_no_self_voice(
-            self, ctx: ApplicationContext, error: ApplicationCommandError
+        self, ctx: ApplicationContext, error: ApplicationCommandError
     ):
         if isinstance(error, CheckFailure):
             await ctx.respond(

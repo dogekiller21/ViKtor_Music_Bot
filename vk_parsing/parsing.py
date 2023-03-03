@@ -61,7 +61,9 @@ class VkParsingClient:
         return TrackInfo.from_response(item_dict=track)
 
     async def get_playlist_tracks(self, url: str) -> list[TrackInfo] | None:
-        request_params = LinkParams.from_input_url(url=url,).to_dict()
+        request_params = LinkParams.from_input_url(
+            url=url,
+        ).to_dict()
         items = await self._make_request(
             method_name=ApiMethods.AUDIO_GET, params=request_params
         )
@@ -92,6 +94,10 @@ if __name__ == "__main__":
 
     loop = asyncio.new_event_loop()
     _client: VkParsingClient = loop.run_until_complete(get_client())
-    playlist = loop.run_until_complete(_client.get_playlist_tracks("https://vk.com/music/playlist/99883438_53060307_f46a1aba7e616001c3"))
+    playlist = loop.run_until_complete(
+        _client.get_playlist_tracks(
+            "https://vk.com/music/playlist/99883438_53060307_f46a1aba7e616001c3"
+        )
+    )
     print(f"{len(playlist)=}")
     loop.run_until_complete(_client.client.close())

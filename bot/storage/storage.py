@@ -1,17 +1,21 @@
+import random
+
 from discord import Bot, Message, ApplicationContext, Interaction, NotFound
 
 from bot.storage.embeds_utils import StorageEmbeds
+from bot.ui.views import PlayerView
 from bot.utils import delete_message
 from vk_parsing.models import TrackInfo
 
 
 class Queue:
-    def __init__(self, guild_id: int, client: Bot):
+    def __init__(self, guild_id: int, client: Bot, storage: "QueueStorage"):
         self.current_index = 0
         self.tracks: list[TrackInfo] = []
         self.guild_id = guild_id
         self.client = client
         self.player_message: Message | None = None
+        self.storage = storage
 
     def add_tracks(self, tracks: list[TrackInfo]) -> int:
         """
@@ -29,8 +33,14 @@ class Queue:
 
     def inc_index(self) -> int:
         self.current_index += 1
-        if self.current_index >= len(self.tracks):
+        if self.current_index >= len(self):
             self.current_index = 0
+        return self.current_index
+
+    def dec_index(self) -> int:
+        self.current_index -= 2
+        if self.current_index < -1:
+            self.current_index = len(self) - 2
         return self.current_index
 
     def get_current_track(self) -> TrackInfo | None:
@@ -60,7 +70,9 @@ class Queue:
         if self.player_message is not None:
             await self.update_message()
             return
-        interaction = await ctx.respond(embed=embed)
+        interaction = await ctx.respond(
+            embed=embed, view=PlayerView(queue=self, storage=self.storage)
+        )
         if isinstance(interaction, Interaction):
             self.player_message = interaction.message
         else:
@@ -81,6 +93,21 @@ class Queue:
         except NotFound:
             self.player_message = None
 
+    def shuffle_tracks(self):
+        if len(self) == 1:
+            return
+        # TODO: сделать шафл последнего трека
+        if self.current_index >= len(self) - 2:
+            sequence_to_shuffle = self.tracks[: self.current_index]
+            start_index = 0
+            end_index = self.current_index
+        else:
+            sequence_to_shuffle = self.tracks[self.current_index + 1 :]
+            start_index = self.current_index + 1
+            end_index = len(self) - 1
+        random.shuffle(sequence_to_shuffle)
+        self.tracks[start_index:end_index] = sequence_to_shuffle
+
 
 class QueueStorage:
     def __init__(self, client: Bot):
@@ -97,7 +124,9 @@ class QueueStorage:
         if guild_id not in self._storage:
             if not create_if_not_exist:
                 return
-            self._storage[guild_id] = Queue(guild_id=guild_id, client=self._client)
+            self._storage[guild_id] = Queue(
+                guild_id=guild_id, client=self._client, storage=self
+            )
         return self._storage.get(guild_id)
 
     async def del_queue(self, guild_id: int):

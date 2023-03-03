@@ -36,7 +36,7 @@ class StorageEmbeds:
         if next_track is not None:
             embed.add_field(
                 name="**Next track**",
-                value=f"**{queue.current_index + 1 + 1}. {next_track.get_full_name()}** {next_track.duration}"
+                value=f"**{queue.current_index + 1 + 1}. {next_track.get_full_name()}** {next_track.duration}",
             )
         embed.set_thumbnail(url=current_track.thumb_url)
 

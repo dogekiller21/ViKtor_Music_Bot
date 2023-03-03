@@ -1,5 +1,12 @@
-from discord import Message, PCMVolumeTransformer, FFmpegPCMAudio, AudioSource, ApplicationContext, VoiceClient, \
-    VoiceProtocol
+from discord import (
+    Message,
+    PCMVolumeTransformer,
+    FFmpegPCMAudio,
+    AudioSource,
+    ApplicationContext,
+    VoiceClient,
+    VoiceProtocol,
+)
 
 from bot.constants import FFMPEG_OPTIONS
 
