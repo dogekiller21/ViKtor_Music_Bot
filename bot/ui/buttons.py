@@ -56,7 +56,7 @@ class SkipButton(Button):
 class PlayPauseButton(Button):
     def __init__(self, queue: "Queue"):
         super().__init__(
-            emoji="▶️",
+            emoji="⏸️",
             style=ButtonStyle.secondary,
             custom_id=f"{queue.guild_id}:play_pause",
             row=0,
@@ -65,10 +65,10 @@ class PlayPauseButton(Button):
 
     async def callback(self, interaction: Interaction):
         if interaction.guild.voice_client.is_playing():
-            self.emoji = "⏸️"
+            self.emoji = "▶️"
             interaction.guild.voice_client.pause()
         else:
-            self.emoji = "▶️"
+            self.emoji = "⏸"
             interaction.guild.voice_client.resume()
         await interaction.message.edit(view=self.view)
         await self.queue.update_message()

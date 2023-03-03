@@ -96,7 +96,7 @@ class Queue:
     def shuffle_tracks(self):
         if len(self) == 1:
             return
-        # TODO: сделать шафл последнего трека
+        # TODO: сделать шафл последнего трека вместо этого
         if self.current_index >= len(self) - 2:
             sequence_to_shuffle = self.tracks[: self.current_index]
             start_index = 0
