@@ -1,6 +1,7 @@
 import random
 
 from discord import Bot, Message, ApplicationContext, Interaction, NotFound
+from discord.ext.pages import Paginator
 
 from bot.storage.embeds_utils import StorageEmbeds
 from bot.ui.views import PlayerView
@@ -15,6 +16,7 @@ class Queue:
         self.guild_id = guild_id
         self.client = client
         self.player_message: Message | None = None
+        self.queue_paginator: Paginator | None = None
         self.storage = storage
 
     def add_tracks(self, tracks: list[TrackInfo]) -> int:
@@ -68,8 +70,7 @@ class Queue:
             print(f"Embed is none while sending player message")
             return
         if self.player_message is not None:
-            await self.update_message()
-            return
+            await self.delete_player_message()
         interaction = await ctx.respond(
             embed=embed, view=PlayerView(queue=self, storage=self.storage)
         )
@@ -81,17 +82,56 @@ class Queue:
     async def delete_player_message(self):
         await delete_message(self.player_message)
 
-    async def update_message(self):
+    async def update_player_message(self):
         if self.player_message is None:
             return
         embed = StorageEmbeds.get_player_embed(queue=self)
         if embed is None:
             await self.delete_player_message()
             self.player_message = None
+            return
         try:
             await self.player_message.edit(embed=embed)
         except NotFound:
             self.player_message = None
+
+    async def update_queue_message(self):
+        if self.queue_paginator is None:
+            return
+        if not self.tracks:
+            await self.delete_queue_message()
+            self.queue_paginator = None
+            return
+        pages, current_page = StorageEmbeds.get_queue_pages_and_page(queue=self)
+        try:
+            self.queue_paginator.current_page = current_page
+            # noinspection PyTypeChecker
+            await self.queue_paginator.update(
+                pages=pages,
+                custom_buttons=self.queue_paginator.custom_buttons
+            )
+        except Exception as e:
+            print(f"Exc while updating paginator: {e}")
+            await self.delete_queue_message()
+
+    async def update_messages(self):
+        await self.update_player_message()
+        await self.update_queue_message()
+
+    async def delete_queue_message(self):
+        if self.queue_paginator is None:
+            return
+        await delete_message(self.queue_paginator.message)
+
+    async def send_queue_message(self, ctx: ApplicationContext):
+        paginator = StorageEmbeds.get_queue_paginator(queue=self)
+        if paginator is None:
+            print(f"Paginator is none while sending queue message")
+            return
+        if self.queue_paginator is not None:
+            await self.delete_queue_message()
+        self.queue_paginator = paginator
+        await paginator.respond(interaction=ctx.interaction)
 
     def shuffle_tracks(self):
         if len(self) == 1:
@@ -138,4 +178,5 @@ class QueueStorage:
         ) is None:
             return
         await queue.delete_player_message()
+        await queue.delete_queue_message()
         del self._storage[guild_id]

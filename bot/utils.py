@@ -1,3 +1,5 @@
+import logging
+
 from discord import (
     Message,
     PCMVolumeTransformer,
@@ -5,10 +7,11 @@ from discord import (
     AudioSource,
     ApplicationContext,
     VoiceClient,
-    VoiceProtocol,
+    VoiceProtocol, Guild,
 )
 
 from bot.constants import FFMPEG_OPTIONS
+from db.models import Guild as DBGuild, Settings
 
 
 async def delete_message(message: Message):
@@ -32,3 +35,15 @@ async def join_author_voice(ctx: ApplicationContext) -> VoiceClient | VoiceProto
     else:
         await channel.connect()
     return ctx.voice_client
+
+
+async def check_guild(guild: Guild):
+    guild, is_created = await DBGuild.get_or_create(
+        discord_id=guild.id,
+        defaults={
+            "name": guild.name,
+        }
+    )
+    if is_created:
+        await Settings.create(guild=guild)
+        logging.info(f"New guild created: {guild.name} with id {guild.id}")

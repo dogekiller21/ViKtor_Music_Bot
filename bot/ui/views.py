@@ -5,7 +5,7 @@ from bot.ui.buttons import (
     StopButton,
     PlayPauseButton,
     PrevButton,
-    ShuffleButton,
+    ShuffleButton, VolUpButton, VolDownButton,
 )
 
 if TYPE_CHECKING:
@@ -22,6 +22,8 @@ class PlayerView(View):
             PlayPauseButton(queue=queue),
             SkipButton(guild_id=queue.guild_id),
             StopButton(guild_id=queue.guild_id, storage=storage),
+            VolUpButton(queue=queue),
+            VolDownButton(queue=queue),
         )
 
         super().__init__(*items, timeout=None)

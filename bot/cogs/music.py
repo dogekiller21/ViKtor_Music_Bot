@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from discord import (
     Bot,
@@ -18,7 +19,9 @@ from vkwave.api.methods._error import APIError
 from bot.checks import check_user_voice, check_self_voice
 from bot.embeds import BotEmbeds
 from bot.storage import QueueStorage
-from bot.utils import get_source, join_author_voice
+from bot.utils import get_source, join_author_voice, check_guild
+from db.db import get_settings
+from db.models import Settings
 from vk_parsing.exceptions import IncorrectPlaylistUrlException
 from vk_parsing.models import TrackInfo
 from vk_parsing.parsing import get_client, VkParsingClient
@@ -30,6 +33,9 @@ class MusicCog(commands.Cog, name="Music"):
         # self.vk_parser: VkParsingClient = self.client.loop.run_until_complete(get_client())
         self.vk_parser: VkParsingClient = VkParsingClient()
         self.storage = QueueStorage(client=self.client)
+
+    async def cog_before_invoke(self, ctx: ApplicationContext):
+        await check_guild(guild=ctx.guild)
 
     async def _search_track_autocomplete(
         self, ctx: AutocompleteContext
@@ -50,37 +56,38 @@ class MusicCog(commands.Cog, name="Music"):
                     name=f"🎵 {full_title} [{result.duration}]", value=result.vk_id
                 )
             )
-
-        # for i, choice in enumerate(choices):
-        #     print(f"{i}. {choice.name}")
         return choices
 
     def _after(self, error: Exception, guild: Guild):
         if error:
             print(f"Error while playing in {guild.name}: {error}")
         if guild.voice_client is None:
-            print(f"Voice client in {guild.name} is None, skipping _after")
+            logging.info(f"Voice client in {guild.name} is None, skipping _after")
             return
         queue = self.storage.get_queue(guild_id=guild.id, create_if_not_exist=False)
         if queue is None:
-            print(f"End of queue for guild {guild.name}")
+            logging.info(f"End of queue for guild {guild.name}")
             return
         queue.inc_index()
         current_track = queue.get_current_track()
         if current_track is None:
-            print(f"End of queue for guild {guild.name}")
+            logging.info(f"End of queue for guild {guild.name}")
             asyncio.run_coroutine_threadsafe(
                 coro=self.storage.del_queue(guild_id=guild.id),
                 loop=guild.voice_client.client.loop,
             )
-
             return
+        # TODO: переделать чтоб это лежало в классе Queue
+        db_settings: Settings = asyncio.run_coroutine_threadsafe(
+            coro=get_settings(guild_id=guild.id),
+            loop=guild.voice_client.client.loop
+        ).result()
         guild.voice_client.play(
-            source=get_source(track_url=current_track.mp3_url, volume_level=0.5),
+            source=get_source(track_url=current_track.mp3_url, volume_level=db_settings.volume_option / 100),
             after=lambda err: self._after(error=err, guild=guild),
         )
         asyncio.run_coroutine_threadsafe(
-            coro=queue.update_message(), loop=guild.voice_client.client.loop
+            coro=queue.update_messages(), loop=guild.voice_client.client.loop
         )
 
     async def _add_tracks_and_send_message(
@@ -88,14 +95,15 @@ class MusicCog(commands.Cog, name="Music"):
     ):
         queue = self.storage.get_queue(guild_id=ctx.guild_id)
         added_tracks_count = queue.add_tracks(tracks=tracks)
+        db_settings = await get_settings(guild_id=ctx.guild_id)
         if not ctx.voice_client.source:
             ctx.voice_client.play(
-                source=get_source(track_url=tracks[0].mp3_url, volume_level=0.5),
+                source=get_source(track_url=tracks[0].mp3_url, volume_level=db_settings.volume_option / 100),
                 after=lambda err: self._after(error=err, guild=ctx.guild),
             )
             await queue.send_player_message(ctx=ctx)
             return
-        await queue.update_message()
+        await queue.update_messages()
         await ctx.respond(
             embed=BotEmbeds.info_embed(
                 description=f"Added {added_tracks_count} track{'s' if added_tracks_count > 1 else ''}\n"
@@ -144,6 +152,27 @@ class MusicCog(commands.Cog, name="Music"):
         await ctx.respond(
             embed=BotEmbeds.info_embed(description="Thanks for listening <3")
         )
+
+    @slash_command(
+        name="leave",
+        description="Leave channel, remove tracks from queue if any",
+        checks=[check_self_voice]
+    )
+    async def leave_channel(self, ctx: ApplicationContext):
+        await self.storage.del_queue(guild_id=ctx.guild_id)
+        await ctx.voice_client.disconnect(force=True)
+        await ctx.respond(
+            embed=BotEmbeds.info_embed(description="Bye!")
+        )
+
+    @slash_command(
+        name="queue",
+        description="Get queue list for current playlist",
+        checks=[check_self_voice]
+    )
+    async def queue_command(self, ctx: ApplicationContext):
+        queue = self.storage.get_queue(guild_id=ctx.guild_id)
+        await queue.send_queue_message(ctx=ctx)
 
     @play_single_track.before_invoke
     @play_playlist.before_invoke
@@ -197,6 +226,8 @@ class MusicCog(commands.Cog, name="Music"):
             return
 
     @stop_playing.error
+    @leave_channel.error
+    @queue_command.error
     async def on_error_no_self_voice(
         self, ctx: ApplicationContext, error: ApplicationCommandError
     ):

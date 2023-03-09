@@ -1,5 +1,4 @@
 from discord import Embed
-from discord.embeds import EmptyEmbed
 
 from bot.constants import CustomColors
 
