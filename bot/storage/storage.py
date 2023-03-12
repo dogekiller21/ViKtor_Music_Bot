@@ -80,6 +80,8 @@ class Queue:
             self.player_message = interaction
 
     async def delete_player_message(self):
+        if self.player_message is None:
+            return
         await delete_message(self.player_message)
 
     async def update_player_message(self):
@@ -151,8 +153,8 @@ class Queue:
 
 class QueueStorage:
     def __init__(self, client: Bot):
-        self._storage = {}
-        self._client = client
+        self._storage: dict[int, Queue] = {}
+        self._client: Bot = client
 
     def get_queue(
         self, guild_id: int, create_if_not_exist: bool = True

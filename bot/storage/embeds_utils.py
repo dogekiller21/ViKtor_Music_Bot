@@ -15,7 +15,7 @@ class StorageEmbeds:
         return Embed(
             title=title,
             description=description,
-            color=CustomColors.INFO_COLOR,
+            color=CustomColors.QUEUE_COLOR,
             **kwargs
         )
 
@@ -81,14 +81,14 @@ class StorageEmbeds:
             return
         page_buttons = [
             PaginatorButton(
-                "first", emoji="⏪", style=ButtonStyle.green
+                "first", emoji="⏪", style=ButtonStyle.gray
             ),
-            PaginatorButton("prev", emoji="⬅", style=ButtonStyle.green),
+            PaginatorButton("prev", emoji="⬅", style=ButtonStyle.gray),
             PaginatorButton(
                 "page_indicator", style=ButtonStyle.gray, disabled=True
             ),
-            PaginatorButton("next", emoji="➡", style=ButtonStyle.green),
-            PaginatorButton("last", emoji="⏩", style=ButtonStyle.green),
+            PaginatorButton("next", emoji="➡", style=ButtonStyle.gray),
+            PaginatorButton("last", emoji="⏩", style=ButtonStyle.gray),
         ]
         pages, current_page = StorageEmbeds.get_queue_pages_and_page(queue=queue)
 

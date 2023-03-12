@@ -10,7 +10,7 @@ from discord import (
     CheckFailure,
     Guild,
     SlashCommandGroup,
-    ApplicationCommandError,
+    ApplicationCommandError, Member, VoiceState,
 )
 from discord.ext import commands
 from discord.commands import slash_command
@@ -236,6 +236,15 @@ class MusicCog(commands.Cog, name="Music"):
                 embed=BotEmbeds.error_embed(description="Nothing is playing"),
                 ephemeral=True,
             )
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member: Member, before: VoiceState, after: VoiceState):
+        if member != self.client.user:
+            return
+        if before.channel is not None and after.channel is None:
+            logging.info(f"Client kicked from channel {before.channel.name}")
+            await self.storage.del_queue(guild_id=member.guild.id)
+            member.guild.voice_client.stop()
 
 
 def setup(client: Bot):
