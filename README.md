@@ -1,6 +1,6 @@
-
 > **Для запуска бота у себя**
-> * **Скопируйте код бота себе** с помощью `git clone -b rework https://github.com/dogekiller21/ViKtor_Music_Bot`
+> * **Установите Python3.10 [*(ссылка)*](https://www.python.org/downloads/)**
+> * **Скопируйте код бота себе** с помощью `git clone https://github.com/dogekiller21/ViKtor_Music_Bot`
 > * **Создайте виртуальное окружение** (в папке проекта `python -m venv venv`)
 > * **Активируйте виртуальное окружение** \
 (Для Windows: `venv/Scripts/activate.bat` \
