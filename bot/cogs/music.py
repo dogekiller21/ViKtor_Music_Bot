@@ -22,6 +22,8 @@ from bot.storage import QueueStorage
 from bot.utils import get_source, join_author_voice, check_guild
 from db.db import get_settings
 from db.models import Settings
+from lyrics.exceptions import SongNotFoundException, LyricsParsingError
+from lyrics.lyrics import LyricsParser
 from vk_parsing.exceptions import IncorrectPlaylistUrlException
 from vk_parsing.models import TrackInfo
 from vk_parsing.parsing import get_client, VkParsingClient
@@ -32,13 +34,14 @@ class MusicCog(commands.Cog, name="Music"):
         self.client = client
         # self.vk_parser: VkParsingClient = self.client.loop.run_until_complete(get_client())
         self.vk_parser: VkParsingClient = VkParsingClient()
+        self.lyrics_parser: LyricsParser = LyricsParser()
         self.storage = QueueStorage(client=self.client)
 
     async def cog_before_invoke(self, ctx: ApplicationContext):
         await check_guild(guild=ctx.guild)
 
     async def _search_track_autocomplete(
-        self, ctx: AutocompleteContext
+            self, ctx: AutocompleteContext
     ) -> list[OptionChoice]:
         query = ctx.value.lower()
         if not query:
@@ -91,7 +94,7 @@ class MusicCog(commands.Cog, name="Music"):
         )
 
     async def _add_tracks_and_send_message(
-        self, ctx: ApplicationContext, tracks: list[TrackInfo]
+            self, ctx: ApplicationContext, tracks: list[TrackInfo]
     ):
         queue = self.storage.get_queue(guild_id=ctx.guild_id)
         added_tracks_count = queue.add_tracks(tracks=tracks)
@@ -107,7 +110,7 @@ class MusicCog(commands.Cog, name="Music"):
         await ctx.respond(
             embed=BotEmbeds.info_embed(
                 description=f"Added {added_tracks_count} track{'s' if added_tracks_count > 1 else ''}\n"
-                f"**{f'{tracks[0].get_full_name()}' if added_tracks_count > 1 else ''}**"
+                            f"**{f'{tracks[0].get_full_name()}' if added_tracks_count > 1 else ''}**"
             )
         )
 
@@ -174,6 +177,32 @@ class MusicCog(commands.Cog, name="Music"):
         queue = self.storage.get_queue(guild_id=ctx.guild_id)
         await queue.send_queue_message(ctx=ctx)
 
+    @slash_command(
+        name="lyrics",
+        description="Get lyrics for current track",
+        checks=[check_self_voice]
+    )
+    async def lyrics_command(self, ctx: ApplicationContext):
+        current_track = self.storage.get_queue(guild_id=ctx.guild_id).get_current_track()
+        if current_track is None:
+            return await ctx.respond(
+                embed=BotEmbeds.error_embed(description="Nothing is playing"),
+                ephemeral=True
+            )
+        await ctx.defer()
+        lyrics = await self.lyrics_parser.search(q=current_track.get_full_name(max_length=100))
+        embed = BotEmbeds.info_embed(
+            title=f"Lyrics for {current_track.get_full_name(max_length=50)}",
+            description=f"**{lyrics}**"
+        )
+        embed.set_footer(
+            text="Provided by Genius Lyrics",
+            icon_url="https://images.genius.com/f4a8b5176073cd8f0a4c609e7a64e1f0.300x300x1.png"
+        )
+        await ctx.respond(
+            embed=embed
+        )
+
     @play_single_track.before_invoke
     @play_playlist.before_invoke
     async def ensure_self_voice_and_join(self, ctx: ApplicationContext):
@@ -181,7 +210,7 @@ class MusicCog(commands.Cog, name="Music"):
 
     @play_single_track.error
     async def on_error_play_single_track(
-        self, ctx: ApplicationContext, error: ApplicationCommandError | APIError
+            self, ctx: ApplicationContext, error: ApplicationCommandError | APIError
     ):
         if isinstance(error, CheckFailure):
             await ctx.respond(
@@ -202,7 +231,7 @@ class MusicCog(commands.Cog, name="Music"):
 
     @play_playlist.error
     async def on_error_play_playlist(
-        self, ctx: ApplicationContext, error: ApplicationCommandError
+            self, ctx: ApplicationContext, error: ApplicationCommandError
     ):
         if isinstance(error, CheckFailure):
             await ctx.respond(
@@ -229,12 +258,30 @@ class MusicCog(commands.Cog, name="Music"):
     @leave_channel.error
     @queue_command.error
     async def on_error_no_self_voice(
-        self, ctx: ApplicationContext, error: ApplicationCommandError
+            self, ctx: ApplicationContext, error: ApplicationCommandError
     ):
         if isinstance(error, CheckFailure):
             await ctx.respond(
                 embed=BotEmbeds.error_embed(description="Nothing is playing"),
                 ephemeral=True,
+            )
+
+    @lyrics_command.error
+    async def on_lyrics_error(self, ctx: ApplicationContext, error: ApplicationCommandError):
+        if isinstance(error, CheckFailure):
+            return await ctx.respond(
+                embed=BotEmbeds.error_embed(description="Nothing is playing"),
+                ephemeral=True
+            )
+        if isinstance(error, SongNotFoundException):
+            return await ctx.respond(
+                embed=BotEmbeds.error_embed(description="Lyrics not found for this song :("),
+                ephemeral=True
+            )
+        if isinstance(error, LyricsParsingError):
+            return await ctx.respond(
+                embed=BotEmbeds.error_embed(description="Error occurred while getting lyrics"),
+                ephemeral=True
             )
 
     @commands.Cog.listener()
