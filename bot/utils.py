@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Optional
 
 from discord import (
     Message,
@@ -32,13 +33,12 @@ def get_source(track_url: str, volume_level: float = 0.5) -> AudioSource:
     )
 
 
-async def join_author_voice(ctx: ApplicationContext) -> VoiceClient | VoiceProtocol:
+async def join_author_voice(ctx: ApplicationContext):
     channel = ctx.user.voice.channel
     if ctx.voice_client is not None:
         await ctx.voice_client.move_to(channel)
     else:
         await channel.connect()
-    return ctx.voice_client
 
 
 async def check_guild(guild: Guild):

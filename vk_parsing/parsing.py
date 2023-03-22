@@ -1,6 +1,8 @@
 import logging
+from typing import Optional
 
 from vkwave.api import API
+from vkwave.api.methods._error import APIError
 from vkwave.client import AIOHTTPClient
 
 from config import TokenConfig
@@ -50,15 +52,20 @@ class VkParsingClient:
             return
         return tracks
 
-    async def get_track_by_id(self, track_id: str) -> TrackInfo:
-        track = (
-            await self._make_request(
-                method_name=ApiMethods.AUDIO_GET_BY_ID,
-                params={"audios": track_id},
-                get_items=False,
-            )
-        )[0]
-        return TrackInfo.from_response(item_dict=track)
+    async def get_track_by_id(self, track_id: str) -> Optional[TrackInfo]:
+        try:
+            track = (
+                await self._make_request(
+                    method_name=ApiMethods.AUDIO_GET_BY_ID,
+                    params={"audios": track_id},
+                    get_items=False,
+                )
+            )[0]
+        except APIError as e:
+            logging.info(f"API error for {track_id}: {e}")
+            return
+        else:
+            return TrackInfo.from_response(item_dict=track)
 
     async def get_playlist_tracks(self, url: str) -> list[TrackInfo] | None:
         request_params = LinkParams.from_input_url(

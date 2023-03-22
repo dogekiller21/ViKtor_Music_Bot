@@ -18,6 +18,7 @@ from vkwave.api.methods._error import APIError
 
 from bot.checks import check_user_voice, check_self_voice
 from bot.embeds import BotEmbeds
+from bot.exceptions import JoinVoiceTimeOut
 from bot.storage import QueueStorage
 from bot.utils import get_source, join_author_voice, check_guild
 from db.db import get_settings
@@ -139,9 +140,18 @@ class MusicCog(commands.Cog, name="Music"):
         autocomplete=_search_track_autocomplete,
     )
     async def play_single_track(self, ctx: ApplicationContext, track_name: str):
-        await ctx.defer()  # без этого ctx.respond возвращает Interaction с пустым .message
+        # V .defer() вызывается заранее в .before_invoke
+        # await ctx.defer()  # без этого ctx.respond возвращает Interaction с пустым .message
         #                    await ctx.respond(..., wait=True) может решить это (вроде)
+        if ctx.voice_client is None:
+            return
         vk_track = await self.vk_parser.get_track_by_id(track_id=track_name)
+        if vk_track is None:
+            return await ctx.respond(
+                embed=BotEmbeds.error_embed(
+                    description=f"Error while parsing track info, doublecheck if you\'ve selected it right"
+                )
+            )
         await self._add_tracks_and_send_message(ctx=ctx, tracks=[vk_track])
 
     @play_group.command(
@@ -155,7 +165,10 @@ class MusicCog(commands.Cog, name="Music"):
         required=True,
     )
     async def play_playlist(self, ctx: ApplicationContext, playlist_link: str):
-        await ctx.defer()
+        # V см. async def play_single_track()
+        # await ctx.defer()
+        if ctx.voice_client is None:
+            return
         playlist_tracks = await self.vk_parser.get_playlist_tracks(url=playlist_link)
         await self._add_tracks_and_send_message(ctx=ctx, tracks=playlist_tracks)
 
@@ -217,12 +230,25 @@ class MusicCog(commands.Cog, name="Music"):
     @play_single_track.before_invoke
     @play_playlist.before_invoke
     async def ensure_self_voice_and_join(self, ctx: ApplicationContext):
-        await join_author_voice(ctx=ctx)
+        await ctx.defer()
+        try:
+            await asyncio.wait_for(join_author_voice(ctx=ctx), timeout=10)
+        except asyncio.TimeoutError:
+            await ctx.respond(
+                embed=BotEmbeds.error_embed(
+                    title="Connection timeout",
+                    description="Check discord servers and try again later :("
+                )
+            )
+            await ctx.voice_client.disconnect(force=True)
+            # raise JoinVoiceTimeOut
 
     @play_single_track.error
     async def on_error_play_single_track(
             self, ctx: ApplicationContext, error: ApplicationCommandError | APIError
     ):
+        if isinstance(error, JoinVoiceTimeOut):
+            return
         if isinstance(error, CheckFailure):
             await ctx.respond(
                 embed=BotEmbeds.error_embed(
@@ -244,6 +270,8 @@ class MusicCog(commands.Cog, name="Music"):
     async def on_error_play_playlist(
             self, ctx: ApplicationContext, error: ApplicationCommandError
     ):
+        if isinstance(error, JoinVoiceTimeOut):
+            return
         if isinstance(error, CheckFailure):
             await ctx.respond(
                 embed=BotEmbeds.error_embed(
@@ -302,7 +330,8 @@ class MusicCog(commands.Cog, name="Music"):
         if before.channel is not None and after.channel is None:
             logging.info(f"Client kicked from channel {before.channel.name}")
             await self.storage.del_queue(guild_id=member.guild.id)
-            member.guild.voice_client.stop()
+            if member.guild.voice_client is not None:
+                member.guild.voice_client.stop()
 
 
 def setup(client: Bot):
