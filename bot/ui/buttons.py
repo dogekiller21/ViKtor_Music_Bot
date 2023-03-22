@@ -109,7 +109,9 @@ class VolUpButton(Button):
         if current_volume_level > 100:
             current_volume_level = 100
         interaction.guild.voice_client.source.volume = current_volume_level / 100
-        await change_volume_option(guild_id=interaction.guild_id, volume_level=current_volume_level)
+        await change_volume_option(
+            guild_id=interaction.guild_id, volume_level=current_volume_level
+        )
         await self.queue.update_messages()
         await interaction.response.defer()
 
@@ -130,6 +132,8 @@ class VolDownButton(Button):
         if current_volume_level <= 0:
             current_volume_level = 1
         interaction.guild.voice_client.source.volume = current_volume_level / 100
-        await change_volume_option(guild_id=interaction.guild_id, volume_level=current_volume_level)
+        await change_volume_option(
+            guild_id=interaction.guild_id, volume_level=current_volume_level
+        )
         await self.queue.update_messages()
         await interaction.response.defer()

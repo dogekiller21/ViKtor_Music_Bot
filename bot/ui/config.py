@@ -1,5 +1,3 @@
-
-
 class PlayerEmojis:
     SHUFFLE_EMOJI = "🔀"
     PREV_EMOJI = "⏪"

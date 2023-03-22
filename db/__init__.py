@@ -4,7 +4,8 @@ from config import DBConfig
 
 TORTOISE_ORM = {
     "connections": {
-        "default": f"postgres://{DBConfig.USER}:{DBConfig.PASSWORD}@{DBConfig.HOST}:{DBConfig.PORT}/{DBConfig.DB_NAME}"},
+        "default": f"postgres://{DBConfig.USER}:{DBConfig.PASSWORD}@{DBConfig.HOST}:{DBConfig.PORT}/{DBConfig.DB_NAME}"
+    },
     "apps": {
         "models": {
             "models": ["db.models", "aerich.models"],

@@ -5,7 +5,9 @@ from bot.ui.buttons import (
     StopButton,
     PlayPauseButton,
     PrevButton,
-    ShuffleButton, VolUpButton, VolDownButton,
+    ShuffleButton,
+    VolUpButton,
+    VolDownButton,
 )
 
 if TYPE_CHECKING:

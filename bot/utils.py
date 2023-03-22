@@ -9,7 +9,9 @@ from discord import (
     AudioSource,
     ApplicationContext,
     VoiceClient,
-    VoiceProtocol, Guild, HTTPException,
+    VoiceProtocol,
+    Guild,
+    HTTPException,
 )
 
 from bot.constants import FFMPEG_OPTIONS
@@ -20,7 +22,9 @@ async def delete_message(message: Message):
     try:
         await message.delete()
     except HTTPException as e:
-        logging.warning(f"(Retry in 2s) HTTP Error while deleting message ({message}): {e}")
+        logging.warning(
+            f"(Retry in 2s) HTTP Error while deleting message ({message}): {e}"
+        )
         await asyncio.sleep(2)
         await delete_message(message=message)
     except Exception as e:
@@ -46,7 +50,7 @@ async def check_guild(guild: Guild):
         discord_id=guild.id,
         defaults={
             "name": guild.name,
-        }
+        },
     )
     if is_created:
         await Settings.create(guild=guild)

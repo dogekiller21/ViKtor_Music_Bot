@@ -7,7 +7,11 @@ from vkwave.client import AIOHTTPClient
 
 from config import TokenConfig
 from vk_parsing.constants import ApiMethods
-from vk_parsing.exceptions import NoTracksParsedException
+from vk_parsing.exceptions import (
+    NoTracksParsedException,
+    PlaylistParsingApiError,
+    SingleTrackParsingApiError,
+)
 from vk_parsing.models import TrackInfo, LinkParams, AutocompleteTrackInfo
 
 
@@ -63,7 +67,7 @@ class VkParsingClient:
             )[0]
         except APIError as e:
             logging.info(f"API error for {track_id}: {e}")
-            return
+            raise SingleTrackParsingApiError
         else:
             return TrackInfo.from_response(item_dict=track)
 
@@ -71,9 +75,13 @@ class VkParsingClient:
         request_params = LinkParams.from_input_url(
             url=url,
         ).to_dict()
-        items = await self._make_request(
-            method_name=ApiMethods.AUDIO_GET, params=request_params
-        )
+        try:
+            items = await self._make_request(
+                method_name=ApiMethods.AUDIO_GET, params=request_params
+            )
+        except APIError as e:
+            logging.info(f"API error while parsing playlist {url}: {e}")
+            raise PlaylistParsingApiError
         # items = await self._make_request(
         #     method_name="audio.getPlaylistById", params=request_params
         # ) # если нужна будет инфа без треков

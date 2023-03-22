@@ -9,14 +9,13 @@ if TYPE_CHECKING:
 
 
 class StorageEmbeds:
-
     @staticmethod
     def queue_embed(description: str | None = None, title: str | None = None, **kwargs):
         return Embed(
             title=title,
             description=description,
             color=CustomColors.QUEUE_COLOR,
-            **kwargs
+            **kwargs,
         )
 
     @staticmethod
@@ -67,9 +66,7 @@ class StorageEmbeds:
             page_tracks.append(track_info)
             if len(page_tracks) == 10:
                 pages.append(
-                    StorageEmbeds.queue_embed(
-                        description="\n\n".join(page_tracks)
-                    )
+                    StorageEmbeds.queue_embed(description="\n\n".join(page_tracks))
                 )
                 page_tracks.clear()
         current_page = queue.current_index // 10
@@ -80,13 +77,9 @@ class StorageEmbeds:
         if not queue.tracks:
             return
         page_buttons = [
-            PaginatorButton(
-                "first", emoji="⏪", style=ButtonStyle.gray
-            ),
+            PaginatorButton("first", emoji="⏪", style=ButtonStyle.gray),
             PaginatorButton("prev", emoji="⬅", style=ButtonStyle.gray),
-            PaginatorButton(
-                "page_indicator", style=ButtonStyle.gray, disabled=True
-            ),
+            PaginatorButton("page_indicator", style=ButtonStyle.gray, disabled=True),
             PaginatorButton("next", emoji="➡", style=ButtonStyle.gray),
             PaginatorButton("last", emoji="⏩", style=ButtonStyle.gray),
         ]

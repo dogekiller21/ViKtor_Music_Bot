@@ -4,7 +4,14 @@ import random
 import sys
 import traceback
 
-from discord import Bot, Message, ApplicationContext, Interaction, NotFound, HTTPException
+from discord import (
+    Bot,
+    Message,
+    ApplicationContext,
+    Interaction,
+    NotFound,
+    HTTPException,
+)
 from discord.ext.pages import Paginator
 
 from bot.storage.embeds_utils import StorageEmbeds
@@ -101,14 +108,14 @@ class Queue:
         except NotFound:
             self.player_message = None
         except HTTPException as e:
-            logging.warning(f"(Retry in 2s) HTTPException while updating message {self.player_message}")
+            logging.warning(
+                f"(Retry in 2s) HTTPException while updating message {self.player_message}"
+            )
             await asyncio.sleep(2)
             await self.update_player_message()
         except Exception as e:
             print(f"Error while updating message {self.player_message}:")
-            traceback.print_exception(
-                type(e), e, e.__traceback__, file=sys.stderr
-            )
+            traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
 
     async def update_queue_message(self):
         if self.queue_paginator is None:
@@ -122,8 +129,7 @@ class Queue:
             self.queue_paginator.current_page = current_page
             # noinspection PyTypeChecker
             await self.queue_paginator.update(
-                pages=pages,
-                custom_buttons=self.queue_paginator.custom_buttons
+                pages=pages, custom_buttons=self.queue_paginator.custom_buttons
             )
         except Exception as e:
             print(f"Exc while updating paginator: {e}")
