@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from discord import (
@@ -7,7 +8,7 @@ from discord import (
     AudioSource,
     ApplicationContext,
     VoiceClient,
-    VoiceProtocol, Guild,
+    VoiceProtocol, Guild, HTTPException,
 )
 
 from bot.constants import FFMPEG_OPTIONS
@@ -17,9 +18,12 @@ from db.models import Guild as DBGuild, Settings
 async def delete_message(message: Message):
     try:
         await message.delete()
+    except HTTPException as e:
+        logging.warning(f"(Retry in 2s) HTTP Error while deleting message ({message}): {e}")
+        await asyncio.sleep(2)
+        await delete_message(message=message)
     except Exception as e:
-        print(f"Error while deleting message in {message.guild.name}: {e}")
-        return
+        print(f"Error while deleting message ({message}): {e}")
 
 
 def get_source(track_url: str, volume_level: float = 0.5) -> AudioSource:

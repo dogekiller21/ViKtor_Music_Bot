@@ -1,6 +1,10 @@
+import asyncio
+import logging
 import random
+import sys
+import traceback
 
-from discord import Bot, Message, ApplicationContext, Interaction, NotFound
+from discord import Bot, Message, ApplicationContext, Interaction, NotFound, HTTPException
 from discord.ext.pages import Paginator
 
 from bot.storage.embeds_utils import StorageEmbeds
@@ -96,6 +100,15 @@ class Queue:
             await self.player_message.edit(embed=embed)
         except NotFound:
             self.player_message = None
+        except HTTPException as e:
+            logging.warning(f"(Retry in 2s) HTTPException while updating message {self.player_message}")
+            await asyncio.sleep(2)
+            await self.update_player_message()
+        except Exception as e:
+            print(f"Error while updating message {self.player_message}:")
+            traceback.print_exception(
+                type(e), e, e.__traceback__, file=sys.stderr
+            )
 
     async def update_queue_message(self):
         if self.queue_paginator is None:

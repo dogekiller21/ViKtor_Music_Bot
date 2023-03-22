@@ -65,7 +65,11 @@ class MusicCog(commands.Cog, name="Music"):
         if error:
             print(f"Error while playing in {guild.name}: {error}")
         if guild.voice_client is None:
-            logging.info(f"Voice client in {guild.name} is None, skipping _after")
+            logging.info(f"Voice client in {guild.name} is None, deleting queue")
+            asyncio.run_coroutine_threadsafe(
+                coro=self.storage.del_queue(guild_id=guild.id),
+                loop=guild.voice_client.client.loop,
+            )
             return
         queue = self.storage.get_queue(guild_id=guild.id, create_if_not_exist=False)
         if queue is None:
@@ -85,6 +89,13 @@ class MusicCog(commands.Cog, name="Music"):
             coro=get_settings(guild_id=guild.id),
             loop=guild.voice_client.client.loop
         ).result()
+        if guild.voice_client is None:
+            logging.info(f"End of queue for guild {guild.name}")
+            asyncio.run_coroutine_threadsafe(
+                coro=self.storage.del_queue(guild_id=guild.id),
+                loop=guild.voice_client.client.loop,
+            )
+            return
         guild.voice_client.play(
             source=get_source(track_url=current_track.mp3_url, volume_level=db_settings.volume_option / 100),
             after=lambda err: self._after(error=err, guild=guild),
