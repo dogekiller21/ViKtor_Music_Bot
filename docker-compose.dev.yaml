@@ -8,11 +8,8 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-<<<<<<< HEAD
       POSTGRES_DB: ${POSTGRES_DB:-viktor_bot}
-=======
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
->>>>>>> 618ee396d576039e174892cb26f251b50d5d66c5
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
 
   bot:
@@ -29,11 +26,8 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-<<<<<<< HEAD
       POSTGRES_DB: ${POSTGRES_DB:-viktor_bot}
-=======
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
->>>>>>> 618ee396d576039e174892cb26f251b50d5d66c5
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_HOST: ${POSTGRES_HOST:-db}
       DC_TOKEN: ${DC_TOKEN:-token}
