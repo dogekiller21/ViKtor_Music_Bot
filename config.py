@@ -14,4 +14,4 @@ class DBConfig:
     PORT = os.getenv("POSTGRES_PORT")
     USER = os.getenv("POSTGRES_USER")
     PASSWORD = os.getenv("POSTGRES_PASSWORD")
-    DB_NAME = os.getenv("POSTGRES_DB_NAME")
+    DB_NAME = os.getenv("POSTGRES_DB")

@@ -8,8 +8,9 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-viktor_bot}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      PGDATA: /var/lib/postgresql/data
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -27,7 +28,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-viktor_bot}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_HOST: ${POSTGRES_HOST:-db}
       DC_TOKEN: ${DC_TOKEN:-token}
