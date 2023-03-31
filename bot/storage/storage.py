@@ -20,6 +20,9 @@ from bot.utils import delete_message
 from vk_parsing.models import TrackInfo
 
 
+logger = logging.getLogger(__name__)
+
+
 class Queue:
     def __init__(self, guild_id: int, client: Bot, storage: "QueueStorage"):
         self.current_index = 0
@@ -78,7 +81,7 @@ class Queue:
     async def send_player_message(self, ctx: ApplicationContext):
         embed = StorageEmbeds.get_player_embed(queue=self)
         if embed is None:
-            print(f"Embed is none while sending player message")
+            logger.debug(f"Embed is none while sending player message")
             return
         if self.player_message is not None:
             await self.delete_player_message()
@@ -107,8 +110,8 @@ class Queue:
             await self.player_message.edit(embed=embed)
         except NotFound:
             self.player_message = None
-        except HTTPException as e:
-            logging.warning(
+        except HTTPException:
+            logger.info(
                 f"(Retry in 2s) HTTPException while updating message {self.player_message}"
             )
             await asyncio.sleep(2)
@@ -132,7 +135,7 @@ class Queue:
                 pages=pages, custom_buttons=self.queue_paginator.custom_buttons
             )
         except Exception as e:
-            print(f"Exc while updating paginator: {e}")
+            logger.info(f"Exc while updating paginator: {e}")
             await self.delete_queue_message()
 
     async def update_messages(self):
@@ -147,7 +150,7 @@ class Queue:
     async def send_queue_message(self, ctx: ApplicationContext):
         paginator = StorageEmbeds.get_queue_paginator(queue=self)
         if paginator is None:
-            print(f"Paginator is none while sending queue message")
+            logger.debug(f"Paginator is none while sending queue message")
             return
         if self.queue_paginator is not None:
             await self.delete_queue_message()

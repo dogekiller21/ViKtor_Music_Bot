@@ -15,6 +15,9 @@ from vk_parsing.exceptions import (
 from vk_parsing.models import TrackInfo, LinkParams, AutocompleteTrackInfo
 
 
+logger = logging.getLogger(__name__)
+
+
 class VkParsingClient:
     def __init__(self):
         self.api: API | None = None
@@ -30,7 +33,7 @@ class VkParsingClient:
         self, method_name: str, params: dict = None, get_items: bool = True
     ) -> list[dict]:
         if self.api is None:
-            logging.info("VK API client was not initialized until now")
+            logger.info("VK API client was not initialized until now")
             await self.init_client()
         if params is None:
             params = {}
@@ -66,7 +69,7 @@ class VkParsingClient:
                 )
             )[0]
         except APIError as e:
-            logging.info(f"API error for {track_id}: {e}")
+            logger.info(f"API error for {track_id}: {e}")
             raise SingleTrackParsingApiError
         else:
             return TrackInfo.from_response(item_dict=track)
@@ -80,7 +83,7 @@ class VkParsingClient:
                 method_name=ApiMethods.AUDIO_GET, params=request_params
             )
         except APIError as e:
-            logging.info(f"API error while parsing playlist {url}: {e}")
+            logger.info(f"API error while parsing playlist {url}: {e}")
             raise PlaylistParsingApiError
         # items = await self._make_request(
         #     method_name="audio.getPlaylistById", params=request_params
@@ -102,17 +105,3 @@ async def get_client() -> VkParsingClient:
     # )
     # print(tracks[0])
     return vk_client
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    loop = asyncio.new_event_loop()
-    _client: VkParsingClient = loop.run_until_complete(get_client())
-    playlist = loop.run_until_complete(
-        _client.get_playlist_tracks(
-            "https://vk.com/music/playlist/99883438_53060307_f46a1aba7e616001c3"
-        )
-    )
-    print(f"{len(playlist)=}")
-    loop.run_until_complete(_client.client.close())

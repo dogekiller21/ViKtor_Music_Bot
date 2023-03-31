@@ -1,0 +1,39 @@
+version: "3"
+services:
+  db:
+    image: postgres:14
+    restart: on-failure
+    ports:
+      - "5432:${POSTGRES_PORT:-5432}"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-app}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  bot:
+    image: bot
+    depends_on:
+      - db
+    restart: on-failure
+    command: python3.10 main.py
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB_NAME: ${POSTGRES_DB_NAME:-app}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      DC_TOKEN: ${DC_TOKEN:-token}
+      VK_TOKEN: ${VK_TOKEN:-token}
+      GENIUS_TOKEN: ${GENIUS_TOKEN:-token}
+
+volumes:
+  postgres_data:
+    driver: local

@@ -8,6 +8,8 @@ from lyrics.config import GENIUS_TOKEN
 from lyrics.constants import BASE_API_URL, BASE_URL
 from lyrics.exceptions import SongNotFoundException, LyricsParsingError
 
+logger = logging.getLogger(__name__)
+
 
 class LyricsParser:
     def __init__(self):
@@ -18,10 +20,10 @@ class LyricsParser:
     ) -> Union[dict, str]:
         if self.session is None:
             self.session = ClientSession()
-            logging.info("Session for lyrics parser was not initialized until now")
+            logger.info("Session for lyrics parser was not initialized until now")
         async with self.session.get(url=url, headers=headers) as resp:
             if resp.status != 200:
-                logging.warning(f"{resp.status} while fetching {url} in lyrics parser")
+                logger.warning(f"{resp.status} while fetching {url} in lyrics parser")
                 raise LyricsParsingError()
             if return_json:
                 return await resp.json()
