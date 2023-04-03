@@ -11,7 +11,7 @@ from discord import (
     VoiceClient,
     VoiceProtocol,
     Guild,
-    HTTPException,
+    HTTPException, Bot,
 )
 
 from bot.constants import FFMPEG_OPTIONS
@@ -60,3 +60,8 @@ async def check_guild(guild: Guild):
     if is_created:
         await Settings.create(guild=guild)
         logging.info(f"New guild created: {guild.name} with id {guild.id}")
+
+
+async def run_custom_event(client: Bot, event: str, *args, **kwargs):
+    # Bot.dispatch(...) нужен луп, который теряется в синх функции((
+    return client.dispatch(event, *args, **kwargs)

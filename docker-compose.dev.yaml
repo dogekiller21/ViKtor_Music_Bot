@@ -8,7 +8,6 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB: ${POSTGRES_DB:-viktor_bot}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
 
@@ -26,7 +25,6 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB: ${POSTGRES_DB:-viktor_bot}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_HOST: ${POSTGRES_HOST:-db}

@@ -21,7 +21,7 @@ from vkwave.api.methods._error import APIError
 from bot.checks import check_user_voice, check_self_voice
 from bot.embeds import BotEmbeds
 from bot.storage import QueueStorage
-from bot.utils import get_source, join_author_voice, check_guild
+from bot.utils import get_source, join_author_voice, check_guild, run_custom_event
 from db.db import get_settings
 from db.models import Settings
 from lyrics.exceptions import SongNotFoundException, LyricsParsingError
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 class MusicCog(commands.Cog, name="Music"):
     def __init__(self, client: Bot):
-        self.client = client
+        self.client: Bot = client
         # self.vk_parser: VkParsingClient = self.client.loop.run_until_complete(get_client())
         self.vk_parser: VkParsingClient = VkParsingClient()
         self.lyrics_parser: LyricsParser = LyricsParser()
@@ -72,17 +72,21 @@ class MusicCog(commands.Cog, name="Music"):
 
     def _after(self, error: Exception, guild: Guild):
         if error:
-            print(f"Error while playing in {guild.name}: {error}")
+            logger.info(f"Error while playing in {guild.name}: {error}")
         if guild.voice_client is None:
             logger.info(f"Voice client in {guild.name} is None, deleting queue")
             asyncio.run_coroutine_threadsafe(
                 coro=self.storage.del_queue(guild_id=guild.id),
-                loop=guild.voice_client.client.loop,
+                loop=self.client.loop or asyncio.get_event_loop(),
             )
             return
         queue = self.storage.get_queue(guild_id=guild.id, create_if_not_exist=False)
         if queue is None:
             logger.info(f"End of queue for guild {guild.name}")
+            asyncio.run_coroutine_threadsafe(
+                coro=run_custom_event(self.client, "end_play", guild),
+                loop=self.client.loop or asyncio.get_event_loop(),
+            )
             return
         queue.inc_index()
         current_track = queue.get_current_track()
@@ -90,20 +94,17 @@ class MusicCog(commands.Cog, name="Music"):
             logger.info(f"End of queue for guild {guild.name}")
             asyncio.run_coroutine_threadsafe(
                 coro=self.storage.del_queue(guild_id=guild.id),
-                loop=guild.voice_client.client.loop,
+                loop=self.client.loop or asyncio.get_event_loop(),
+            )
+            asyncio.run_coroutine_threadsafe(
+                coro=run_custom_event(self.client, "end_play", guild),
+                loop=self.client.loop or asyncio.get_event_loop(),
             )
             return
         # TODO: переделать чтоб это лежало в классе Queue
         db_settings: Settings = asyncio.run_coroutine_threadsafe(
-            coro=get_settings(guild_id=guild.id), loop=guild.voice_client.client.loop
+            coro=get_settings(guild_id=guild.id), loop=self.client.loop or asyncio.get_event_loop()
         ).result()
-        if guild.voice_client is None:
-            logger.info(f"End of queue for guild {guild.name}")
-            asyncio.run_coroutine_threadsafe(
-                coro=self.storage.del_queue(guild_id=guild.id),
-                loop=guild.voice_client.client.loop,
-            )
-            return
         guild.voice_client.play(
             source=get_source(
                 track_url=current_track.mp3_url,
@@ -112,7 +113,7 @@ class MusicCog(commands.Cog, name="Music"):
             after=lambda err: self._after(error=err, guild=guild),
         )
         asyncio.run_coroutine_threadsafe(
-            coro=queue.update_messages(), loop=guild.voice_client.client.loop
+            coro=queue.update_messages(), loop=self.client.loop or asyncio.get_event_loop()
         )
 
     async def _add_tracks_and_send_message(
@@ -122,6 +123,7 @@ class MusicCog(commands.Cog, name="Music"):
         added_tracks_count = queue.add_tracks(tracks=tracks)
         db_settings = await get_settings(guild_id=ctx.guild_id)
         if not ctx.voice_client.source:
+            self.client.dispatch("start_play", ctx.guild)
             ctx.voice_client.play(
                 source=get_source(
                     track_url=tracks[0].mp3_url,
@@ -343,8 +345,29 @@ class MusicCog(commands.Cog, name="Music"):
     async def on_voice_state_update(
         self, member: Member, before: VoiceState, after: VoiceState
     ):
+        if (
+            member != self.client.user
+            and after.channel is None
+            and member.guild.voice_client is not None
+            and before.channel == member.guild.voice_client.channel
+        ):
+            members = before.channel.members
+            if len(members) == 1 and members[0] == self.client.user:
+
+                def check(m, _, __):
+                    return m.voice.channel == member.voice.channel
+
+                try:
+                    await self.client.wait_for("voice_state_update", check=check, timeout=15)
+                except asyncio.TimeoutError:
+                    if member.guild.voice_client is not None:
+                        await self.storage.del_queue(guild_id=member.guild.id)
+                        await member.guild.voice_client.disconnect(force=True)
+            return
+
         if member != self.client.user:
             return
+
         if before.channel is not None and after.channel is None:
             logger.info(f"Client kicked from channel {before.channel.name}")
             await self.storage.del_queue(guild_id=member.guild.id)
