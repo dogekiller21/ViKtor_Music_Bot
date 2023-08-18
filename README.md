@@ -1,3 +1,11 @@
+# ViKtor WILL BE BACK!
+Обновленная версия со всеми фиксами и стабильной работой выйдет... когда-нибудь
+
+На текущий момент проект брошен в свободное плаванье
+
+Если у вас есть какие-то вопросы или предложения, сообщайте мне в [Telegram](https://t.me/dogekiller21)
+
+
 # ViKtor Discord Music Bot
 
 **Пригласить бота к себе можно по [ссылке](https://discord.com/api/oauth2/authorize?client_id=821326877213327371&permissions=8&scope=bot%20applications.commands)**
